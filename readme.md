@@ -14,3 +14,8 @@ Note:
 If you are patching on top of wine-staging, the following patch need to be excluded:
 
 - winepulse-PulseAudio_Support/0001-winepulse.drv-Use-a-separate-mainloop-and-ctx-for-pu.patch
+
+Change log:
+
+- 2025-12-03 Fix controllers speakers not playing in Spider-Man
+- 2025-12-02 Initial separated patch files
