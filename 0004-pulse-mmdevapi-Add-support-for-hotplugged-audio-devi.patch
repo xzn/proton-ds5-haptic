@@ -1,4 +1,4 @@
-From 119ac0ecf1f36f50151aab0f8b07babb5ee772e3 Mon Sep 17 00:00:00 2001
+From f3bbc4889386fc97d9799e8ecd0da5547d71d6af Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
@@ -14,7 +14,7 @@ Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
  6 files changed, 834 insertions(+), 267 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 2d6b59b1660..2ff7c020294 100644
+index 4d9b40933c1..4d8504345fb 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -37,7 +37,7 @@ index 2d6b59b1660..2ff7c020294 100644
  typedef struct MMDevColImpl
  {
      IMMDeviceCollection IMMDeviceCollection_iface;
-@@ -642,6 +653,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -636,6 +647,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
      PropVariantInit(&container_id);
  
@@ -45,7 +45,7 @@ index 2d6b59b1660..2ff7c020294 100644
      LIST_FOR_EACH_ENTRY(device, &device_list, MMDevice, entry)
      {
          if (device->flow == flow && IsEqualGUID(&device->devguid, id)){
-@@ -649,6 +661,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -643,6 +655,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
              break;
          }
      }
@@ -53,7 +53,7 @@ index 2d6b59b1660..2ff7c020294 100644
  
      if(!cur){
          /* No device found, allocate new one */
-@@ -659,7 +672,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -653,7 +666,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          cur->IMMDevice_iface.lpVtbl = &MMDeviceVtbl;
          cur->IMMEndpoint_iface.lpVtbl = &MMEndpointVtbl;
  
@@ -63,7 +63,7 @@ index 2d6b59b1660..2ff7c020294 100644
      }else if(cur->ref > 0)
          WARN("Modifying an MMDevice with positive reference count!\n");
  
-@@ -746,10 +761,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -738,10 +753,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
      if (setdefault)
      {
@@ -76,7 +76,7 @@ index 2d6b59b1660..2ff7c020294 100644
      }
      return cur;
  }
-@@ -863,34 +880,138 @@ static HRESULT set_format(MMDevice *dev)
+@@ -855,34 +872,138 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -227,7 +227,7 @@ index 2d6b59b1660..2ff7c020294 100644
  
  end:
      free(params.endpoints);
-@@ -1156,11 +1277,13 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1148,11 +1269,13 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -241,7 +241,7 @@ index 2d6b59b1660..2ff7c020294 100644
  
      if (This->devices_count)
      {
-@@ -1168,6 +1291,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1160,6 +1283,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
          if (!This->devices_count)
              return E_OUTOFMEMORY;
  
@@ -249,7 +249,7 @@ index 2d6b59b1660..2ff7c020294 100644
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
              if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1177,6 +1301,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1169,6 +1293,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
                  i++;
              }
          }
@@ -257,7 +257,7 @@ index 2d6b59b1660..2ff7c020294 100644
      }
  
      return S_OK;
-@@ -1277,8 +1402,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
+@@ -1269,8 +1394,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
      MMDevice *device, *next;
@@ -269,7 +269,7 @@ index 2d6b59b1660..2ff7c020294 100644
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
      key_render = key_capture = NULL;
-@@ -1404,10 +1532,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1396,10 +1524,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -282,7 +282,7 @@ index 2d6b59b1660..2ff7c020294 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1431,6 +1561,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1423,6 +1553,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          return S_OK;
      }
  
@@ -290,7 +290,7 @@ index 2d6b59b1660..2ff7c020294 100644
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1445,6 +1576,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1437,6 +1568,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -298,7 +298,7 @@ index 2d6b59b1660..2ff7c020294 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1452,6 +1584,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1444,6 +1576,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -306,7 +306,7 @@ index 2d6b59b1660..2ff7c020294 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1464,7 +1597,6 @@ struct NotificationClientWrapper {
+@@ -1456,7 +1589,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
