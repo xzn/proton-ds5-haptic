@@ -1,4 +1,4 @@
-From a1858007b59e62c92bf7e0446dbdf31c54b0ad9c Mon Sep 17 00:00:00 2001
+From 807fe4504540b72f76c11277c6a6105dc65353c5 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
 Subject: [PATCH 5/5] mmdevapi: Call registered IMMNotificationClients when
@@ -317,5 +317,5 @@ index 4d8504345fb..e380b49d5fc 100644
  {
      struct NotificationClientWrapper *wrapper;
 -- 
-2.51.2
+2.52.0
 

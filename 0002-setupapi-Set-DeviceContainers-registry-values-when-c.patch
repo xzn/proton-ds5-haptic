@@ -132,5 +132,5 @@ index 0c222d0c19d..85115911a31 100644
      {
          LONG l = RegSetValueExA(device->key, PropertyMap[Property].nameA, 0,
 -- 
-2.51.2
+2.52.0
 
