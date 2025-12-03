@@ -1,0 +1,321 @@
+From d8d71889aa218de27659740294cf0ffb2708def7 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Tue, 2 Dec 2025 20:41:59 -0400
+Subject: [PATCH 5/5] mmdevapi: Call registered IMMNotificationClients when
+ updating states/adding devices.
+
+---
+ dlls/mmdevapi/devenum.c | 208 +++++++++++++++++++++++++---------------
+ 1 file changed, 132 insertions(+), 76 deletions(-)
+
+diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
+index 2ff7c020294..7e46a9d2bab 100644
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -89,8 +89,24 @@ static CRITICAL_SECTION_DEBUG device_list_cs_debug =
+ static CRITICAL_SECTION device_list_cs = { &device_list_cs_debug, -1, 0, 0, 0, 0 };
+ static IMMDevice info_device;
+ 
+-/* forward declare */
++struct NotificationClientWrapper {
++    IMMNotificationClient *client;
++    struct list entry;
++};
++
++static struct list g_notif_clients = LIST_INIT(g_notif_clients);
++static HANDLE g_notif_thread;
++
+ static CRITICAL_SECTION g_notif_lock;
++static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
++{
++    0, 0, &g_notif_lock,
++    { &g_notif_lock_debug.ProcessLocksList, &g_notif_lock_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": g_notif_lock") }
++};
++static CRITICAL_SECTION g_notif_lock = { &g_notif_lock_debug, -1, 0, 0, 0, 0 };
++
++static const WCHAR devid_formatW[] = L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}";
+ 
+ typedef struct MMDevColImpl
+ {
+@@ -439,6 +455,22 @@ static HRESULT MMDevice_SetPropValue(const GUID *devguid, DWORD flow, REFPROPERT
+     }
+     RegCloseKey(regkey);
+     TRACE("Writing %s returned %lu\n", debugstr_w(buffer), ret);
++
++    if (SUCCEEDED(hr))
++    {
++        struct NotificationClientWrapper *wrapper;
++        WCHAR devid[56];
++        const GUID *id = devguid;
++        swprintf(devid, 56, devid_formatW,
++            flow, id->Data1, id->Data2, id->Data3,
++            id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
++            id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
++
++        EnterCriticalSection(&g_notif_lock);
++        LIST_FOR_EACH_ENTRY(wrapper, &g_notif_clients, struct NotificationClientWrapper, entry)
++            IMMNotificationClient_OnPropertyValueChanged(wrapper->client, devid, *key);
++        LeaveCriticalSection(&g_notif_lock);
++    }
+     return hr;
+ }
+ 
+@@ -631,6 +663,56 @@ static void MMDevice_Register(const WCHAR *instguid, const WCHAR *friendly_name,
+         WARN("SetupDiCreateDeviceInfoList failed.");
+ }
+ 
++static HRESULT set_format(MMDevice *dev)
++{
++    HRESULT hr;
++    IAudioClient *client;
++    WAVEFORMATEX *fmt;
++    WAVEFORMATEXTENSIBLE *fmtex;
++    PROPVARIANT pv = { VT_EMPTY };
++
++    hr = AudioClient_Create(&dev->devguid, &dev->IMMDevice_iface, &client);
++    if(FAILED(hr))
++        return hr;
++
++    hr = IAudioClient_GetMixFormat(client, &fmt);
++    if(FAILED(hr)){
++        IAudioClient_Release(client);
++        return hr;
++    }
++
++    IAudioClient_Release(client);
++
++    /* for most devices, native Windows only allows PCM formats for
++     * DeviceFormat. GetMixFormat often returns float. */
++    if(fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE){
++        fmtex = (WAVEFORMATEXTENSIBLE *)fmt;
++        if(IsEqualGUID(&fmtex->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)){
++            fmt->wBitsPerSample = 16;
++            fmt->nBlockAlign = fmt->wBitsPerSample * fmt->nChannels / 8;
++            fmt->nAvgBytesPerSec = fmt->nSamplesPerSec * fmt->nBlockAlign;
++            fmtex->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
++            fmtex->Samples.wValidBitsPerSample = fmt->wBitsPerSample;
++        }
++    }else if(fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT){
++        fmt->wFormatTag = WAVE_FORMAT_PCM;
++        fmt->wBitsPerSample = 16;
++        fmt->nBlockAlign = fmt->wBitsPerSample * fmt->nChannels / 8;
++        fmt->nAvgBytesPerSec = fmt->nSamplesPerSec * fmt->nBlockAlign;
++    }
++
++    pv.vt = VT_BLOB;
++    pv.blob.cbSize = sizeof(WAVEFORMATEX) + fmt->cbSize;
++    pv.blob.pBlobData = (BYTE*)fmt;
++    MMDevice_SetPropValue(&dev->devguid, dev->flow,
++            &PKEY_AudioEngine_DeviceFormat, &pv);
++    MMDevice_SetPropValue(&dev->devguid, dev->flow,
++            &PKEY_AudioEngine_OEMFormat, &pv);
++    CoTaskMemFree(fmt);
++
++    return S_OK;
++}
++
+ /* Creates or updates the state of a device
+  * If GUID is null, a random guid will be assigned
+  * and the device will be created
+@@ -642,6 +724,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+     WCHAR guidstr[39];
+     PROPVARIANT container_id;
+     WCHAR *friendly_name;
++    BOOL update_add = FALSE;
++    BOOL update_state = FALSE;
+ 
+     static const PROPERTYKEY deviceinterface_key = {
+         {0x233164c8, 0x1b2c, 0x4c7d, {0xbc, 0x68, 0xb6, 0x71, 0x68, 0x7a, 0x25, 0x67}}, 1
+@@ -663,20 +747,23 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+     }
+     LeaveCriticalSection(&device_list_cs);
+ 
+-    if(!cur){
++    if (!cur) {
+         /* No device found, allocate new one */
+         cur = calloc(1, sizeof(*cur));
+         if (!cur)
+             return NULL;
+-
+         cur->IMMDevice_iface.lpVtbl = &MMDeviceVtbl;
+         cur->IMMEndpoint_iface.lpVtbl = &MMEndpointVtbl;
+-
+         EnterCriticalSection(&device_list_cs);
+         list_add_tail(&device_list, &cur->entry);
+         LeaveCriticalSection(&device_list_cs);
+-    }else if(cur->ref > 0)
+-        WARN("Modifying an MMDevice with positive reference count!\n");
++        update_add = TRUE;
++    } else {
++        if (cur->ref > 0)
++            WARN("Modifying an MMDevice with positive reference count!\n");
++        if (cur->state != state)
++            update_state = TRUE;
++    }
+ 
+     free(cur->drv_id);
+     cur->drv_id = wcsdup(name);
+@@ -768,6 +855,29 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+             MMDevice_def_rec = cur;
+         LeaveCriticalSection(&g_notif_lock);
+     }
++
++    if (state == DEVICE_STATE_ACTIVE)
++        set_format(cur);
++
++    if (update_add || update_state)
++    {
++        struct NotificationClientWrapper *wrapper;
++        WCHAR devid[56];
++        swprintf(devid, 56, devid_formatW,
++            flow, id->Data1, id->Data2, id->Data3,
++            id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
++            id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
++
++        EnterCriticalSection(&g_notif_lock);
++        LIST_FOR_EACH_ENTRY(wrapper, &g_notif_clients, struct NotificationClientWrapper, entry)
++        {
++            if (update_add)
++                IMMNotificationClient_OnDeviceAdded(wrapper->client, devid);
++            if (update_add || update_state)
++                IMMNotificationClient_OnDeviceStateChanged(wrapper->client, devid, state);
++        }
++        LeaveCriticalSection(&g_notif_lock);
++    }
+     return cur;
+ }
+ 
+@@ -830,68 +940,16 @@ HRESULT load_devices_from_reg(void)
+     return S_OK;
+ }
+ 
+-static HRESULT set_format(MMDevice *dev)
+-{
+-    HRESULT hr;
+-    IAudioClient *client;
+-    WAVEFORMATEX *fmt;
+-    WAVEFORMATEXTENSIBLE *fmtex;
+-    PROPVARIANT pv = { VT_EMPTY };
+-
+-    hr = AudioClient_Create(&dev->devguid, &dev->IMMDevice_iface, &client);
+-    if(FAILED(hr))
+-        return hr;
+-
+-    hr = IAudioClient_GetMixFormat(client, &fmt);
+-    if(FAILED(hr)){
+-        IAudioClient_Release(client);
+-        return hr;
+-    }
+-
+-    IAudioClient_Release(client);
+-
+-    /* for most devices, native Windows only allows PCM formats for
+-     * DeviceFormat. GetMixFormat often returns float. */
+-    if(fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE){
+-        fmtex = (WAVEFORMATEXTENSIBLE *)fmt;
+-        if(IsEqualGUID(&fmtex->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)){
+-            fmt->wBitsPerSample = 16;
+-            fmt->nBlockAlign = fmt->wBitsPerSample * fmt->nChannels / 8;
+-            fmt->nAvgBytesPerSec = fmt->nSamplesPerSec * fmt->nBlockAlign;
+-            fmtex->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+-            fmtex->Samples.wValidBitsPerSample = fmt->wBitsPerSample;
+-        }
+-    }else if(fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT){
+-        fmt->wFormatTag = WAVE_FORMAT_PCM;
+-        fmt->wBitsPerSample = 16;
+-        fmt->nBlockAlign = fmt->wBitsPerSample * fmt->nChannels / 8;
+-        fmt->nAvgBytesPerSec = fmt->nSamplesPerSec * fmt->nBlockAlign;
+-    }
+-
+-    pv.vt = VT_BLOB;
+-    pv.blob.cbSize = sizeof(WAVEFORMATEX) + fmt->cbSize;
+-    pv.blob.pBlobData = (BYTE*)fmt;
+-    MMDevice_SetPropValue(&dev->devguid, dev->flow,
+-            &PKEY_AudioEngine_DeviceFormat, &pv);
+-    MMDevice_SetPropValue(&dev->devguid, dev->flow,
+-            &PKEY_AudioEngine_OEMFormat, &pv);
+-    CoTaskMemFree(fmt);
+-
+-    return S_OK;
+-}
+-
+ static void add_endpoints_from_params(struct get_endpoint_ids_params *params)
+ {
+     UINT i;
+ 
+     for (i = 0; i < params->num; i++) {
+         GUID guid;
+-        MMDevice *dev;
+         const WCHAR *name = (WCHAR *)((char *)params->endpoints + params->endpoints[i].name);
+         const char *dev_name = (char *)params->endpoints + params->endpoints[i].device;
+         drvs.pget_device_guid(params->flow, dev_name, &guid);
+-        dev = MMDevice_Create(name, &guid, params->flow, DEVICE_STATE_ACTIVE, params->default_idx == i);
+-        set_format(dev);
++        MMDevice_Create(name, &guid, params->flow, DEVICE_STATE_ACTIVE, params->default_idx == i);
+     }
+ }
+ 
+@@ -943,6 +1001,10 @@ static DWORD WINAPI update_thread_proc(void *user)
+                 if (dev->flow != params.flow)
+                     continue;
+                 if (IsEqualGUID(&dev->devguid, &guid)) {
++                    struct NotificationClientWrapper *wrapper;
++                    const GUID *id = &dev->devguid;
++                    WCHAR devid[56];
++
+                     dev->state = DEVICE_STATE_NOTPRESENT;
+                     StringFromGUID2(&dev->devguid, guidstr, ARRAY_SIZE(guidstr));
+                     if (dev->flow == eRender)
+@@ -954,6 +1016,16 @@ static DWORD WINAPI update_thread_proc(void *user)
+                         RegSetValueExW(key, L"DeviceState", 0, REG_DWORD, (const BYTE*)&dev->state, sizeof(DWORD));
+                         RegCloseKey(key);
+                     }
++
++                    swprintf(devid, 56, devid_formatW,
++                        dev->flow, id->Data1, id->Data2, id->Data3,
++                        id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
++                        id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
++                    EnterCriticalSection(&g_notif_lock);
++                    LIST_FOR_EACH_ENTRY(wrapper, &g_notif_clients, struct NotificationClientWrapper, entry)
++                        IMMNotificationClient_OnDeviceStateChanged(wrapper->client, devid, dev->state);
++                    LeaveCriticalSection(&g_notif_lock);
++
+                     break;
+                 }
+             }
+@@ -1187,7 +1259,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+     *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
+     if (!str)
+         return E_OUTOFMEMORY;
+-    wsprintfW(str, L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
++    wsprintfW(str, devid_formatW,
+               This->flow, id->Data1, id->Data2, id->Data3,
+               id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+               id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
+@@ -1589,22 +1661,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+     return E_INVALIDARG;
+ }
+ 
+-struct NotificationClientWrapper {
+-    IMMNotificationClient *client;
+-    struct list entry;
+-};
+-
+-static struct list g_notif_clients = LIST_INIT(g_notif_clients);
+-static HANDLE g_notif_thread;
+-
+-static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
+-{
+-    0, 0, &g_notif_lock,
+-    { &g_notif_lock_debug.ProcessLocksList, &g_notif_lock_debug.ProcessLocksList },
+-      0, 0, { (DWORD_PTR)(__FILE__ ": g_notif_lock") }
+-};
+-static CRITICAL_SECTION g_notif_lock = { &g_notif_lock_debug, -1, 0, 0, 0, 0 };
+-
+ static void notify_clients(EDataFlow flow, ERole role, const WCHAR *id)
+ {
+     struct NotificationClientWrapper *wrapper;
+-- 
+2.51.2
+
