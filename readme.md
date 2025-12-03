@@ -8,3 +8,9 @@ For haptic when controller is hotplugged:
 
 - 0004-pulse-mmdevapi-Add-support-for-hotplugged-audio-devi.patch
 - 0005-mmdevapi-Call-registered-IMMNotificationClients-when.patch
+
+Note:
+
+If you are patching on top of wine-staging, the following patch need to be excluded:
+
+- winepulse-PulseAudio_Support/0001-winepulse.drv-Use-a-separate-mainloop-and-ctx-for-pu.patch
