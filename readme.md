@@ -17,6 +17,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-04 Fix crash in Death Stranding Director's Cut when switching BB sound device (haptic still doesn't work)
 - 2025-12-03 Fix potential deadlock in my pulse backend devices update routine (no builds uploaded to release for now)
 - 2025-12-03 Fix controllers speakers not playing in Spider-Man
 - 2025-12-02 Initial separated patch files
