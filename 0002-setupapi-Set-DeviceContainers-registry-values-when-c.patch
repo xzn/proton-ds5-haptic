@@ -1,4 +1,4 @@
-From ad464f109c3d2b21e49aaa60f4e6ba86315598f0 Mon Sep 17 00:00:00 2001
+From 752e14d1ff75081c77d0a8dd35a5b0df58ced5dc Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
 Subject: [PATCH 2/5] setupapi: Set DeviceContainers registry values when
@@ -9,7 +9,7 @@ Subject: [PATCH 2/5] setupapi: Set DeviceContainers registry values when
  1 file changed, 102 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 0c222d0c19d..85115911a31 100644
+index 0c222d0c19d..65d3f9b6f54 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
 @@ -656,9 +656,108 @@ static const struct PropertyMapEntry PropertyMap[] = {
@@ -60,7 +60,7 @@ index 0c222d0c19d..85115911a31 100644
 +                    {
 +                        if (!RegOpenKeyW(key2, container, &key3))
 +                        {
-+                            TRACE("Deleting instance id from device containers: %ls, %ls\n", device->instanceId, container);
++                            TRACE("Deleting instance id from device containers: %s, %ls\n", debugstr_w(device->instanceId), container);
 +                            RegDeleteValueW(key3, device->instanceId);
 +                            remove = RegEnumValueW(key3, 0, data, &data_size, NULL, NULL, NULL, NULL) == ERROR_NO_MORE_ITEMS;
 +                            RegCloseKey(key3);
@@ -95,7 +95,7 @@ index 0c222d0c19d..85115911a31 100644
 +    get_device_containers_path(path, MAX_PATH, container_str);
 +    if (!RegCreateKeyW(HKEY_LOCAL_MACHINE, path, &key))
 +    {
-+        TRACE("device->instanceId: %ls %ls\n", device->instanceId, container_str);
++        TRACE("device->instanceId: %s %ls\n", debugstr_w(device->instanceId), container_str);
 +        RegSetValueExW(key, device->instanceId, 0, REG_NONE, NULL, 0);
 +        RegCloseKey(key);
 +    }

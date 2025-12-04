@@ -1,4 +1,4 @@
-From 42f3e287aae716cc59590b11d29a824c56572ca0 Mon Sep 17 00:00:00 2001
+From dce7e28eedc8feb461497f827e545b3fbf3afe1d Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
