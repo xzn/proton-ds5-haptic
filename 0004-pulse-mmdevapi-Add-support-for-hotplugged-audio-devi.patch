@@ -1,4 +1,4 @@
-From 41d5842854556d0e0f0fbdae2cc42dee61c44ca1 Mon Sep 17 00:00:00 2001
+From 42f3e287aae716cc59590b11d29a824c56572ca0 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
@@ -315,7 +315,7 @@ index 4d9b40933c1..4d8504345fb 100644
  {
      0, 0, &g_notif_lock,
 diff --git a/dlls/mmdevapi/main.c b/dlls/mmdevapi/main.c
-index 74643572348..8c6f347eb4c 100644
+index 5426870e7a3..1af2d7650e9 100644
 --- a/dlls/mmdevapi/main.c
 +++ b/dlls/mmdevapi/main.c
 @@ -204,6 +204,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
