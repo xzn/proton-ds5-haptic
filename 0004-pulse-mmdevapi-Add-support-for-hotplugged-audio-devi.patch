@@ -1,20 +1,20 @@
-From fe348406652caf1f017204989a151839b87b79a4 Mon Sep 17 00:00:00 2001
+From aaffa08611c239a63c2f84505360792a7cd4887c Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/7] pulse/mmdevapi: Add support for hotplugged audio devices
  to be updated in the device list.
 
 ---
- dlls/mmdevapi/devenum.c          | 158 +++++-
- dlls/mmdevapi/main.c             |   1 +
- dlls/mmdevapi/mmdevapi_private.h |   1 +
+ dlls/mmdevapi/devenum.c          | 162 +++++-
+ dlls/mmdevapi/main.c             |   2 +
+ dlls/mmdevapi/mmdevapi_private.h |   2 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
  dlls/winepulse.drv/pulse.c       | 919 ++++++++++++++++++++++---------
- 6 files changed, 843 insertions(+), 265 deletions(-)
+ 6 files changed, 849 insertions(+), 265 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 4d9b40933c1..4d8504345fb 100644
+index 4d9b40933c1..2f052dcfd1f 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -76,7 +76,7 @@ index 4d9b40933c1..4d8504345fb 100644
      }
      return cur;
  }
-@@ -855,34 +872,138 @@ static HRESULT set_format(MMDevice *dev)
+@@ -855,34 +872,142 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -169,8 +169,12 @@ index 4d9b40933c1..4d8504345fb 100644
 +    return 0;
 +}
 +
-+static void create_update_thread(void)
++static BOOL need_update_thread;
++void create_update_thread(void)
 +{
++    if (!need_update_thread)
++        return;
++
 +    if (g_update_thread)
 +        return;
 +
@@ -222,12 +226,12 @@ index 4d9b40933c1..4d8504345fb 100644
 -        set_format(dev);
 -    }
 +    if (params.delta)
-+        create_update_thread();
++        need_update_thread = TRUE;
 +    add_endpoints_from_params(&params);
  
  end:
      free(params.endpoints);
-@@ -1148,11 +1269,13 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1148,11 +1273,13 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -241,7 +245,7 @@ index 4d9b40933c1..4d8504345fb 100644
  
      if (This->devices_count)
      {
-@@ -1160,6 +1283,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1160,6 +1287,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
          if (!This->devices_count)
              return E_OUTOFMEMORY;
  
@@ -249,7 +253,7 @@ index 4d9b40933c1..4d8504345fb 100644
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
              if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1169,6 +1293,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1169,6 +1297,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
                  i++;
              }
          }
@@ -257,7 +261,7 @@ index 4d9b40933c1..4d8504345fb 100644
      }
  
      return S_OK;
-@@ -1269,8 +1394,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
+@@ -1269,8 +1398,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
      MMDevice *device, *next;
@@ -269,7 +273,7 @@ index 4d9b40933c1..4d8504345fb 100644
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
      key_render = key_capture = NULL;
-@@ -1396,10 +1524,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1396,10 +1528,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -282,7 +286,7 @@ index 4d9b40933c1..4d8504345fb 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1423,6 +1553,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1423,6 +1557,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          return S_OK;
      }
  
@@ -290,7 +294,7 @@ index 4d9b40933c1..4d8504345fb 100644
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1437,6 +1568,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1437,6 +1572,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -298,7 +302,7 @@ index 4d9b40933c1..4d8504345fb 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1444,6 +1576,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1444,6 +1580,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -306,7 +310,7 @@ index 4d9b40933c1..4d8504345fb 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1456,7 +1589,6 @@ struct NotificationClientWrapper {
+@@ -1456,7 +1593,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
@@ -315,10 +319,18 @@ index 4d9b40933c1..4d8504345fb 100644
  {
      0, 0, &g_notif_lock,
 diff --git a/dlls/mmdevapi/main.c b/dlls/mmdevapi/main.c
-index 5426870e7a3..1af2d7650e9 100644
+index 5426870e7a3..790eacfdc4c 100644
 --- a/dlls/mmdevapi/main.c
 +++ b/dlls/mmdevapi/main.c
-@@ -204,6 +204,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+@@ -177,6 +177,7 @@ static BOOL WINAPI init_driver(INIT_ONCE *once, void *param, void **context)
+         load_devices_from_reg();
+         load_driver_devices(eRender);
+         load_driver_devices(eCapture);
++        create_update_thread();
+     }
+ 
+     if (drvs.module == 0)
+@@ -204,6 +205,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
              }
  
              main_loop_stop();
@@ -327,13 +339,14 @@ index 5426870e7a3..1af2d7650e9 100644
              if (!lpvReserved)
                  MMDevEnum_Free();
 diff --git a/dlls/mmdevapi/mmdevapi_private.h b/dlls/mmdevapi/mmdevapi_private.h
-index 304487eaf2b..66acbc7a8d4 100644
+index 304487eaf2b..625a8ff7567 100644
 --- a/dlls/mmdevapi/mmdevapi_private.h
 +++ b/dlls/mmdevapi/mmdevapi_private.h
-@@ -76,6 +76,7 @@ extern HRESULT load_devices_from_reg(void);
+@@ -76,6 +76,8 @@ extern HRESULT load_devices_from_reg(void);
  extern HRESULT load_driver_devices(EDataFlow flow);
  
  extern void main_loop_stop(void);
++extern void create_update_thread(void);
 +extern void stop_update_thread(void);
  
  extern const WCHAR drv_keyW[];

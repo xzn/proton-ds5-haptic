@@ -1,4 +1,4 @@
-From a2465c27fbed36faa97c28a196f7cd265c5dc062 Mon Sep 17 00:00:00 2001
+From c0163dcdc663ecc149698c5ec8a31cb20190fecb Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
 Subject: [PATCH 6/7] setupapi: SetupDiGetDeviceRegistryProperty now returns
