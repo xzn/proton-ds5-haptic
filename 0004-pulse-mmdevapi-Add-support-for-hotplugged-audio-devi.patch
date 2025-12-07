@@ -1,4 +1,4 @@
-From dce7e28eedc8feb461497f827e545b3fbf3afe1d Mon Sep 17 00:00:00 2001
+From fe348406652caf1f017204989a151839b87b79a4 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
@@ -10,8 +10,8 @@ Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
- dlls/winepulse.drv/pulse.c       | 922 ++++++++++++++++++++++---------
- 6 files changed, 843 insertions(+), 268 deletions(-)
+ dlls/winepulse.drv/pulse.c       | 919 ++++++++++++++++++++++---------
+ 6 files changed, 843 insertions(+), 265 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
 index 4d9b40933c1..4d8504345fb 100644
@@ -422,7 +422,7 @@ index 0617c5977c9..8d913cd6af1 100644
              return TRUE;
          }
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 85062ead684..bc965e94e68 100644
+index 85062ead684..26e88910282 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
 @@ -124,6 +124,19 @@ typedef struct _PhysDevice {
@@ -617,7 +617,7 @@ index 85062ead684..bc965e94e68 100644
  }
  
  static NTSTATUS pulse_main_loop(void *args)
-@@ -314,78 +428,191 @@ static NTSTATUS pulse_main_loop(void *args)
+@@ -314,78 +428,194 @@ static NTSTATUS pulse_main_loop(void *args)
      struct main_loop_params *params = args;
      int ret;
      pulse_lock();
@@ -718,6 +718,9 @@ index 85062ead684..bc965e94e68 100644
  }
  
 -static void pulse_contextcallback(pa_context *c, void *userdata)
++/* for winepulse, this function can be called in a separate thread from other functions. */
++/* this function cannot be called from multiple threads at the same time however. */
++/* for the list variable, all devices in it must be ready by the end of the lock. */
 +static NTSTATUS pulse_get_endpoint_ids(void *args)
  {
 -    switch (pa_context_get_state(c)) {
@@ -857,7 +860,7 @@ index 85062ead684..bc965e94e68 100644
  }
  
  static void pulse_stream_state(pa_stream *s, void *user)
-@@ -430,47 +657,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
+@@ -430,47 +660,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
      return pa_stream_get_state(stream->stream) == PA_STREAM_READY;
  }
  
@@ -905,7 +908,7 @@ index 85062ead684..bc965e94e68 100644
  static UINT pulse_channel_map_to_channel_mask(const pa_channel_map *map)
  {
      int i;
-@@ -679,58 +865,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
+@@ -679,58 +868,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
          dev->container_id = get_container_id(buffer);
  }
  
@@ -964,7 +967,7 @@ index 85062ead684..bc965e94e68 100644
  /* For most hardware on Windows, users must choose a configuration with an even
   * number of channels (stereo, quad, 5.1, 7.1). Users can then disable
   * channels, but those channels are still reported to applications from
-@@ -814,80 +948,366 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
+@@ -814,80 +951,366 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
      fmt->dwChannelMask = pa_mask;
  }
  
@@ -1379,7 +1382,7 @@ index 85062ead684..bc965e94e68 100644
  }
  
  /* some poorly-behaved applications call audio functions during DllMain, so we
-@@ -897,35 +1317,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
+@@ -897,35 +1320,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
  static NTSTATUS pulse_test_connect(void *args)
  {
      struct test_connect_params *params = args;
@@ -1438,7 +1441,7 @@ index 85062ead684..bc965e94e68 100644
      /* Wait for connection */
      while (pa_mainloop_iterate(pulse_ml, 1, &ret) >= 0) {
          pa_context_state_t state = pa_context_get_state(pulse_ctx);
-@@ -944,53 +1371,24 @@ static NTSTATUS pulse_test_connect(void *args)
+@@ -944,53 +1374,24 @@ static NTSTATUS pulse_test_connect(void *args)
          pa_context_get_server(pulse_ctx),
          pa_context_get_server_protocol_version(pulse_ctx));
  
@@ -1501,17 +1504,15 @@ index 85062ead684..bc965e94e68 100644
      pulse_unlock();
      params->priority = Priority_Unavailable;
      return STATUS_SUCCESS;
-@@ -1214,16 +1612,20 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1214,6 +1615,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
          return E_POINTER;
      }
  
 +    g_phys_lock();
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
--        if (strcmp(pulse_name, dev->pulse_name))
-+        if (!dev->ready || strcmp(pulse_name, dev->pulse_name))
+         if (strcmp(pulse_name, dev->pulse_name))
              continue;
- 
-         if (def)
+@@ -1222,8 +1624,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
              *def = dev->def_period;
          if (min)
              *min = dev->min_period;
@@ -1523,14 +1524,13 @@ index 85062ead684..bc965e94e68 100644
  
      return E_FAIL;
  }
-@@ -2410,15 +2812,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
+@@ -2410,15 +2815,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
 +    g_phys_lock();
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
--        if (strcmp(params->device, dev->pulse_name))
-+        if (!dev->ready || strcmp(params->device, dev->pulse_name))
+         if (strcmp(params->device, dev->pulse_name))
              continue;
  
          *params->fmt = dev->fmt;
@@ -1543,14 +1543,13 @@ index 85062ead684..bc965e94e68 100644
  
      params->result = E_FAIL;
      return STATUS_SUCCESS;
-@@ -2720,17 +3124,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2720,17 +3127,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
 +    g_phys_lock();
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
--        if (strcmp(params->device, dev->pulse_name))
-+        if (!dev->ready || strcmp(params->device, dev->pulse_name))
+         if (strcmp(params->device, dev->pulse_name))
              continue;
          if (IsEqualPropertyKey(*params->prop, devicepath_key)) {
              get_device_path(dev, params);
@@ -1567,7 +1566,7 @@ index 85062ead684..bc965e94e68 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              case 3:   /* PhysicalSpeakers */
-@@ -2738,6 +3147,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2738,6 +3150,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
                      goto fail;
                  params->value->vt = VT_UI4;
                  params->value->ulVal = dev->channel_mask;
@@ -1576,7 +1575,7 @@ index 85062ead684..bc965e94e68 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              }
-@@ -2752,14 +3163,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2752,14 +3166,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
                  params->result = S_OK;
              }
  
