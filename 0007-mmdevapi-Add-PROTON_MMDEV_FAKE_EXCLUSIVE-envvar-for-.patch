@@ -1,12 +1,13 @@
-From b20f3a1097d37083c5b2a3aa58190769ee23429e Mon Sep 17 00:00:00 2001
+From 115d4b726af918cad16fefa0502d849b9a6907a7 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
 Subject: [PATCH 7/7] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
  faking exclusive audio device support.
 
 ---
- dlls/mmdevapi/client.c | 42 ++++++++++++++++++++++++++++++++++++------
- 1 file changed, 36 insertions(+), 6 deletions(-)
+ dlls/mmdevapi/client.c     | 42 ++++++++++++++++++++++++++++++++------
+ dlls/winepulse.drv/pulse.c |  2 ++
+ 2 files changed, 38 insertions(+), 6 deletions(-)
 
 diff --git a/dlls/mmdevapi/client.c b/dlls/mmdevapi/client.c
 index 07390b16527..7fa3281003d 100644
@@ -94,6 +95,19 @@ index 07390b16527..7fa3281003d 100644
      return params.result;
  }
  
+diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
+index 26e88910282..ce21d0527a5 100644
+--- a/dlls/winepulse.drv/pulse.c
++++ b/dlls/winepulse.drv/pulse.c
+@@ -2721,6 +2721,8 @@ static NTSTATUS pulse_is_format_supported(void *args)
+                                              AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED;
+         else if (params->result == S_FALSE)
+             params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
++
++        WARN("Exclusive mode requested but winepulse.drv does not support exclusive mode.\n");
+     }
+ 
+     return STATUS_SUCCESS;
 -- 
 2.52.0
 

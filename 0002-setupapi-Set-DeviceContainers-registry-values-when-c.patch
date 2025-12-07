@@ -1,18 +1,18 @@
-From 752e14d1ff75081c77d0a8dd35a5b0df58ced5dc Mon Sep 17 00:00:00 2001
+From 45ac191b58f934a5148c13719657bdf33311bcbb Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
 Subject: [PATCH 2/7] setupapi: Set DeviceContainers registry values when
  container ids are set.
 
 ---
- dlls/setupapi/devinst.c | 102 ++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 102 insertions(+)
+ dlls/setupapi/devinst.c | 105 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 105 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 0c222d0c19d..65d3f9b6f54 100644
+index 0c222d0c19d..75ce560fa06 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -656,9 +656,108 @@ static const struct PropertyMapEntry PropertyMap[] = {
+@@ -656,9 +656,111 @@ static const struct PropertyMapEntry PropertyMap[] = {
  };
  #undef PROPERTY_MAP_ENTRY
  
@@ -33,7 +33,7 @@ index 0c222d0c19d..65d3f9b6f54 100644
 +static void SETUPDI_UpdateDeviceContainersW(struct device *device, const BYTE *buffer, DWORD buffer_size)
 +{
 +    WCHAR path[MAX_PATH];
-+    LPCWSTR container_str = (LPCWSTR)buffer;
++    WCHAR container_str[GUID_STR_LEN];
 +    HKEY key;
 +    DWORD data_size = GUID_STR_LEN * sizeof(WCHAR);
 +    LPVOID data = NULL;
@@ -89,6 +89,9 @@ index 0c222d0c19d..65d3f9b6f54 100644
 +        }
 +    }
 +
++    memcpy(container_str, buffer, buffer_size < sizeof(container_str) ? buffer_size : sizeof(container_str));
++    container_str[GUID_STR_LEN - 1] = 0;
++    _wcslwr(container_str);
 +    if (!lstrcmpW(container_str, GUID_NULL_STR))
 +        return;
 +
@@ -121,7 +124,7 @@ index 0c222d0c19d..65d3f9b6f54 100644
      if (prop < ARRAY_SIZE(PropertyMap) && PropertyMap[prop].nameW)
      {
          LONG ret = RegSetValueExW(device->key, PropertyMap[prop].nameW, 0,
-@@ -3670,6 +3769,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
+@@ -3670,6 +3772,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
      if (!(device = get_device(devinfo, device_data)))
          return FALSE;
  

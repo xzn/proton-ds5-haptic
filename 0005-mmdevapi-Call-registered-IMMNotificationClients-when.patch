@@ -1,4 +1,4 @@
-From 6bf1514c3006a8e80f629d835781e42789751f98 Mon Sep 17 00:00:00 2001
+From 0abc351bd829bb3d6023d1b8a1134d92c8dfbbf2 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
 Subject: [PATCH 5/7] mmdevapi: Call registered IMMNotificationClients when
@@ -9,7 +9,7 @@ Subject: [PATCH 5/7] mmdevapi: Call registered IMMNotificationClients when
  1 file changed, 132 insertions(+), 76 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 2f052dcfd1f..cbfcae6e276 100644
+index 3358e416b1a..8939af8d396 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -89,8 +89,24 @@ static CRITICAL_SECTION_DEBUG device_list_cs_debug =
@@ -34,7 +34,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
 +};
 +static CRITICAL_SECTION g_notif_lock = { &g_notif_lock_debug, -1, 0, 0, 0, 0 };
 +
-+static const WCHAR devid_formatW[] = L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}";
++static const WCHAR devid_formatW[] = L"{0.0.%u.00000000}.{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}";
  
  typedef struct MMDevColImpl
  {
@@ -61,7 +61,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
      return hr;
  }
  
-@@ -624,6 +656,56 @@ static void MMDevice_Register(const WCHAR *instguid, const WCHAR *friendly_name,
+@@ -626,6 +658,56 @@ static void MMDevice_Register(const WCHAR *instguid, const WCHAR *friendly_name,
          WARN("SetupDiCreateDeviceInfoList failed.");
  }
  
@@ -118,7 +118,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
  /* Creates or updates the state of a device
   * If GUID is null, a random guid will be assigned
   * and the device will be created
-@@ -634,6 +716,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -636,6 +718,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
      MMDevice *device, *cur = NULL;
      WCHAR guidstr[39];
      PROPVARIANT container_id;
@@ -127,7 +127,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
      WCHAR friendly_name[FRIENDLY_NAME_MAX];
      const WCHAR *friendly_name_fmt = flow == eRender ? L"Speakers (%ls)" : L"Microphone (%ls)";
  
-@@ -657,20 +741,23 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -659,20 +743,23 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
      }
      LeaveCriticalSection(&device_list_cs);
  
@@ -156,7 +156,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
  
      free(cur->drv_id);
      cur->drv_id = wcsdup(name);
-@@ -760,6 +847,29 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -762,6 +849,29 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
              MMDevice_def_rec = cur;
          LeaveCriticalSection(&g_notif_lock);
      }
@@ -186,7 +186,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
      return cur;
  }
  
-@@ -822,68 +932,16 @@ HRESULT load_devices_from_reg(void)
+@@ -824,68 +934,16 @@ HRESULT load_devices_from_reg(void)
      return S_OK;
  }
  
@@ -256,7 +256,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
      }
  }
  
-@@ -935,6 +993,10 @@ static DWORD WINAPI update_thread_proc(void *user)
+@@ -937,6 +995,10 @@ static DWORD WINAPI update_thread_proc(void *user)
                  if (dev->flow != params.flow)
                      continue;
                  if (IsEqualGUID(&dev->devguid, &guid)) {
@@ -267,7 +267,7 @@ index 2f052dcfd1f..cbfcae6e276 100644
                      dev->state = DEVICE_STATE_NOTPRESENT;
                      StringFromGUID2(&dev->devguid, guidstr, ARRAY_SIZE(guidstr));
                      if (dev->flow == eRender)
-@@ -946,6 +1008,16 @@ static DWORD WINAPI update_thread_proc(void *user)
+@@ -948,6 +1010,16 @@ static DWORD WINAPI update_thread_proc(void *user)
                          RegSetValueExW(key, L"DeviceState", 0, REG_DWORD, (const BYTE*)&dev->state, sizeof(DWORD));
                          RegCloseKey(key);
                      }
@@ -284,16 +284,16 @@ index 2f052dcfd1f..cbfcae6e276 100644
                      break;
                  }
              }
-@@ -1183,7 +1255,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1185,7 +1257,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
--    wsprintfW(str, L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+-    wsprintfW(str, L"{0.0.%u.00000000}.{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
 +    wsprintfW(str, devid_formatW,
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1585,22 +1657,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1587,22 +1659,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
      return E_INVALIDARG;
  }
  

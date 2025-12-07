@@ -22,6 +22,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-07 Lower case for GUIDs strings when possible.
 - 2025-12-07 Maybe fix a hang on startup init in mmdevapi audio device hotplug support.
 - 2025-12-07 Add haptic support for DSDC. Need `PROTON_MMDEV_FAKE_EXCLUSIVE=1` set in envvar.
 - 2025-12-04 Fix crash in Death Stranding Director's Cut when switching BB sound device (haptic still doesn't work)

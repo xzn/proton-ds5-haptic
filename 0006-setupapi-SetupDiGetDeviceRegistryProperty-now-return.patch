@@ -1,4 +1,4 @@
-From c0163dcdc663ecc149698c5ec8a31cb20190fecb Mon Sep 17 00:00:00 2001
+From 6ce34a0031cff76f457fbcf8526e04dca576a124 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
 Subject: [PATCH 6/7] setupapi: SetupDiGetDeviceRegistryProperty now returns
@@ -9,28 +9,30 @@ Subject: [PATCH 6/7] setupapi: SetupDiGetDeviceRegistryProperty now returns
  1 file changed, 9 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 65d3f9b6f54..4a9fdb594f4 100644
+index 75ce560fa06..ec3ae01d195 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -3709,6 +3709,10 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+@@ -3711,7 +3711,11 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+             SetLastError(l);
          if (RequiredSize)
              *RequiredSize = size;
-     }
 +
-+    if (ret && Property == SPDRP_BASE_CONTAINERID)
-+        _strlwr((LPSTR)PropertyBuffer);
++        if (ret && PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
++            _strlwr((LPSTR)PropertyBuffer);
+     }
 +
      return ret;
  }
  
-@@ -3751,6 +3755,11 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+@@ -3753,7 +3757,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+             SetLastError(l);
          if (RequiredSize)
              *RequiredSize = size;
-     }
 +
-+    /* Death Stranding Director's Cut expect the containerId string to be all lower case. */
-+    if (ret && Property == SPDRP_BASE_CONTAINERID)
-+        _wcslwr((LPWSTR)PropertyBuffer);
++        /* Death Stranding Director's Cut expect the containerId string to be all lower case. */
++        if (ret && PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
++            _wcslwr((LPWSTR)PropertyBuffer);
+     }
 +
      return ret;
  }
