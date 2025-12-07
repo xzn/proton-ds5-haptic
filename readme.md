@@ -22,3 +22,7 @@ Change log:
 - 2025-12-03 Fix potential deadlock in my pulse backend devices update routine (no builds uploaded to release for now)
 - 2025-12-03 Fix controllers speakers not playing in Spider-Man
 - 2025-12-02 Initial separated patch files
+
+Known issues:
+
+- Sometimes after upgrading a prefix, you may encounter access violation error in winepulse.drv, it shouldn't happen in a fresh prefix. (Let me know if it does.)
