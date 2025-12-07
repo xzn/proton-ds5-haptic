@@ -1,0 +1,40 @@
+From a2465c27fbed36faa97c28a196f7cd265c5dc062 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Sun, 7 Dec 2025 02:55:09 -0400
+Subject: [PATCH 6/7] setupapi: SetupDiGetDeviceRegistryProperty now returns
+ all lower case for SPDRP_BASE_CONTAINERID.
+
+---
+ dlls/setupapi/devinst.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
+index 65d3f9b6f54..4a9fdb594f4 100644
+--- a/dlls/setupapi/devinst.c
++++ b/dlls/setupapi/devinst.c
+@@ -3709,6 +3709,10 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+         if (RequiredSize)
+             *RequiredSize = size;
+     }
++
++    if (ret && Property == SPDRP_BASE_CONTAINERID)
++        _strlwr((LPSTR)PropertyBuffer);
++
+     return ret;
+ }
+ 
+@@ -3751,6 +3755,11 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+         if (RequiredSize)
+             *RequiredSize = size;
+     }
++
++    /* Death Stranding Director's Cut expect the containerId string to be all lower case. */
++    if (ret && Property == SPDRP_BASE_CONTAINERID)
++        _wcslwr((LPWSTR)PropertyBuffer);
++
+     return ret;
+ }
+ 
+-- 
+2.52.0
+

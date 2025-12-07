@@ -1,7 +1,7 @@
 From fe348406652caf1f017204989a151839b87b79a4 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
-Subject: [PATCH 4/5] pulse/mmdevapi: Add support for hotplugged audio devices
+Subject: [PATCH 4/7] pulse/mmdevapi: Add support for hotplugged audio devices
  to be updated in the device list.
 
 ---

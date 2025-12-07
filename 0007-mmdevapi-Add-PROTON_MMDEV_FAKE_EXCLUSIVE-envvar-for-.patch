@@ -1,0 +1,99 @@
+From 9872545fd8834a7cb4165bfdb0d72545bbd85815 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Sun, 7 Dec 2025 03:12:25 -0400
+Subject: [PATCH 7/7] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
+ faking exclusive audio device support.
+
+---
+ dlls/mmdevapi/client.c | 42 ++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 36 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/mmdevapi/client.c b/dlls/mmdevapi/client.c
+index 07390b16527..7fa3281003d 100644
+--- a/dlls/mmdevapi/client.c
++++ b/dlls/mmdevapi/client.c
+@@ -50,6 +50,20 @@ extern HRESULT get_audio_session(const GUID *sessionguid, IMMDevice *device, UIN
+                                  struct audio_session **out);
+ extern struct audio_session_wrapper *session_wrapper_create(struct audio_client *client);
+ 
++static BOOL device_fake_exclusive(void)
++{
++    WCHAR str[10];
++    DWORD ret = GetEnvironmentVariableW(L"PROTON_MMDEV_FAKE_EXCLUSIVE", str, ARRAY_SIZE(str));
++
++    if (!ret)
++        return FALSE;
++
++    if (ret == 1 && str[0] == L'0')
++        return FALSE;
++
++    return TRUE;
++}
++
+ static HANDLE main_loop_thread;
+ 
+ void main_loop_stop(void)
+@@ -686,6 +700,9 @@ static HRESULT WINAPI client_Initialize(IAudioClient3 *iface, AUDCLNT_SHAREMODE
+                                                wine_dbgstr_longlong(period), fmt,
+                                                debugstr_guid(sessionguid));
+ 
++    if (mode == AUDCLNT_SHAREMODE_EXCLUSIVE && device_fake_exclusive())
++        mode = AUDCLNT_SHAREMODE_SHARED;
++
+     return stream_init(This, TRUE, mode, flags, duration, period, fmt, sessionguid);
+ }
+ 
+@@ -757,31 +774,44 @@ static HRESULT WINAPI client_IsFormatSupported(IAudioClient3 *iface, AUDCLNT_SHA
+ {
+     struct audio_client *This = impl_from_IAudioClient3(iface);
+     struct is_format_supported_params params;
++    BOOL fake_exclusive = FALSE;
+ 
+     TRACE("(%p)->(%x, %p, %p)\n", This, mode, fmt, out);
+ 
+     if (fmt)
+         dump_fmt(fmt);
+ 
++    if (mode == AUDCLNT_SHAREMODE_EXCLUSIVE && device_fake_exclusive()) {
++        mode = AUDCLNT_SHAREMODE_SHARED;
++        fake_exclusive = TRUE;
++    }
++
+     params.device  = This->device_name;
+     params.flow    = This->dataflow;
+     params.share   = mode;
+     params.fmt_in  = fmt;
+     params.fmt_out = NULL;
+ 
+-    if (out) {
++    if (out)
+         *out = NULL;
+-        if (mode == AUDCLNT_SHAREMODE_SHARED)
+-            params.fmt_out = CoTaskMemAlloc(sizeof(*params.fmt_out));
+-    }
++
++    if (
++        (out || fake_exclusive) &&
++        mode == AUDCLNT_SHAREMODE_SHARED
++    )
++        params.fmt_out = CoTaskMemAlloc(sizeof(*params.fmt_out));
+ 
+     wine_unix_call(is_format_supported, &params);
+ 
+-    if (params.result == S_FALSE)
++    if (out && params.result == S_FALSE)
+         *out = &params.fmt_out->Format;
+-    else
++    else {
+         CoTaskMemFree(params.fmt_out);
+ 
++        if (fake_exclusive && params.result == S_FALSE)
++            params.result = AUDCLNT_E_UNSUPPORTED_FORMAT;
++    }
++
+     return params.result;
+ }
+ 
+-- 
+2.52.0
+
