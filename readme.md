@@ -9,6 +9,11 @@ For haptic when controller is hotplugged:
 - 0004-pulse-mmdevapi-Add-support-for-hotplugged-audio-devi.patch
 - 0005-mmdevapi-Call-registered-IMMNotificationClients-when.patch
 
+For Death Stranding Director's Cut:
+
+- 0006-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
+- 0007-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
+
 Note:
 
 If you are patching on top of wine-staging, the following patch need to be excluded:
