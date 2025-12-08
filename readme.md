@@ -14,6 +14,14 @@ For Death Stranding Director's Cut:
 - 0006-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
 - 0007-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
 
+For DSDC crash when controller hotplug patched:
+
+- 0008-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
+
+For God of War Ragnarok
+
+- 0009-setupapi-SetupDiGetDeviceRegistryPropertyA-should-re.patch
+
 Note:
 
 If you are patching on top of wine-staging, the following patch need to be excluded:
@@ -22,6 +30,8 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-08 Add support for God of War Ragnarok.
+- 2025-12-08 Fix crash introduced in previous change when initializing xaudio2.
 - 2025-12-07 Attempt to fix crash when selected audio device in Death Stranding is disconnected.
 - 2025-12-07 Lower case for GUIDs strings when possible.
 - 2025-12-07 Maybe fix a hang on startup init in mmdevapi audio device hotplug support.
