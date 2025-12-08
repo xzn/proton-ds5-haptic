@@ -1,7 +1,7 @@
 From 3c0d820bf0ac0644bbab16e3347a57aa47b349a9 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:54:35 -0400
-Subject: [PATCH 3/8] xaudio2/faudio: Implement taking device ids to create
+Subject: [PATCH 3/9] xaudio2/faudio: Implement taking device ids to create
  speakers channels.
 
 ---

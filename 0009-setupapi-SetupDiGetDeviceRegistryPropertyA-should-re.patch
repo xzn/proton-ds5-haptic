@@ -1,0 +1,45 @@
+From dae2150d4736b27f4cfb0670ef6a350eb67c096e Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Mon, 8 Dec 2025 14:13:12 -0400
+Subject: [PATCH 9/9] setupapi: SetupDiGetDeviceRegistryPropertyA should return
+ wide string for type GUID.
+
+---
+ dlls/setupapi/devinst.c | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
+index ec3ae01d195..8256b7e6726 100644
+--- a/dlls/setupapi/devinst.c
++++ b/dlls/setupapi/devinst.c
+@@ -3698,7 +3698,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+     if (Property < ARRAY_SIZE(PropertyMap) && PropertyMap[Property].nameA)
+     {
+         DWORD size = PropertyBufferSize;
+-        LONG l = RegQueryValueExA(device->key, PropertyMap[Property].nameA,
++        LONG l;
++
++        /* Despite GUID returned as REG_SZ, it's always wide string on Windows. */
++        if (PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
++            return SetupDiGetDeviceRegistryPropertyW(
++                devinfo, device_data, Property, PropertyRegDataType,
++                PropertyBuffer, PropertyBufferSize, RequiredSize
++            );
++
++        l = RegQueryValueExA(device->key, PropertyMap[Property].nameA,
+                 NULL, PropertyRegDataType, PropertyBuffer, &size);
+ 
+         if (l == ERROR_FILE_NOT_FOUND)
+@@ -3711,9 +3720,6 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+             SetLastError(l);
+         if (RequiredSize)
+             *RequiredSize = size;
+-
+-        if (ret && PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
+-            _strlwr((LPSTR)PropertyBuffer);
+     }
+ 
+     return ret;
+-- 
+2.52.0
+
