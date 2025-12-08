@@ -1,7 +1,7 @@
 From 45ac191b58f934a5148c13719657bdf33311bcbb Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
-Subject: [PATCH 2/7] setupapi: Set DeviceContainers registry values when
+Subject: [PATCH 2/8] setupapi: Set DeviceContainers registry values when
  container ids are set.
 
 ---

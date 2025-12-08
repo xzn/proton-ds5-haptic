@@ -1,7 +1,7 @@
 From 0abc351bd829bb3d6023d1b8a1134d92c8dfbbf2 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
-Subject: [PATCH 5/7] mmdevapi: Call registered IMMNotificationClients when
+Subject: [PATCH 5/8] mmdevapi: Call registered IMMNotificationClients when
  updating states/adding devices.
 
 ---
