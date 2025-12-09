@@ -1,20 +1,20 @@
-From 073c22644863b8bb4c7ecd3ffe0db0678a7f44e2 Mon Sep 17 00:00:00 2001
+From c88c9a3a35768545a85f340294d5cceedb0f8c03 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/9] pulse/mmdevapi: Add support for hotplugged audio devices
  to be updated in the device list.
 
 ---
- dlls/mmdevapi/devenum.c          | 179 +++++-
+ dlls/mmdevapi/devenum.c          | 181 +++++-
  dlls/mmdevapi/main.c             |   1 +
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
  dlls/winepulse.drv/pulse.c       | 921 ++++++++++++++++++++++---------
- 6 files changed, 864 insertions(+), 267 deletions(-)
+ 6 files changed, 865 insertions(+), 268 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index f12d28ad45a..c94f5556974 100644
+index f12d28ad45a..d524856fc11 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -258,7 +258,7 @@ index f12d28ad45a..c94f5556974 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1159,11 +1293,13 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1159,6 +1293,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -266,28 +266,26 @@ index f12d28ad45a..c94f5556974 100644
      LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
      {
          if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-             This->devices_count++;
+@@ -1168,8 +1303,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+     if (This->devices_count)
+     {
+         This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
+-        if (!This->devices_count)
++        if (!This->devices_count) {
++            LeaveCriticalSection(&device_list_cs);
+             return E_OUTOFMEMORY;
++        }
+ 
+         LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
+         {
+@@ -1181,6 +1318,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+             }
+         }
      }
 +    LeaveCriticalSection(&device_list_cs);
  
-     if (This->devices_count)
-     {
-@@ -1171,6 +1307,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
-         if (!This->devices_count)
-             return E_OUTOFMEMORY;
- 
-+        EnterCriticalSection(&device_list_cs);
-         LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
-         {
-             if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1180,6 +1317,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
-                 i++;
-             }
-         }
-+        LeaveCriticalSection(&device_list_cs);
-     }
- 
      return S_OK;
+ }
 @@ -1280,8 +1418,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
