@@ -30,6 +30,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-09 Do not create thread in mmdev init (for hotplugged audio device support)
 - 2025-12-09 Cleanup mmdev init and names
 - 2025-12-08 Add support for God of War Ragnarok.
 - 2025-12-08 Fix crash introduced in previous change when initializing xaudio2.
