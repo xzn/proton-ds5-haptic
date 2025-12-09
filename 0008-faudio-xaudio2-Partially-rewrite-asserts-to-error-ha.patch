@@ -1,4 +1,4 @@
-From 3fca4470841cb150cb888cc834d617f2645f1393 Mon Sep 17 00:00:00 2001
+From 061029d4f0072c7ed1bd64d2812806dd17175910 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 20:33:29 -0400
 Subject: [PATCH 8/9] faudio/xaudio2: Partially rewrite asserts to error

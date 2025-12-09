@@ -1,4 +1,4 @@
-From 0e10ebac1f77af41969290978f36fcf1329513d7 Mon Sep 17 00:00:00 2001
+From 7ed10a3551c2cb6b0cac0eb033fced6029db0ac8 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 17:11:04 -0400
 Subject: [PATCH 1/9] mmdevapi/setupapi: HACK: Set MMDevices properties in
@@ -6,9 +6,9 @@ Subject: [PATCH 1/9] mmdevapi/setupapi: HACK: Set MMDevices properties in
 
 ---
  dlls/mmdevapi/Makefile.in |   2 +-
- dlls/mmdevapi/devenum.c   | 165 ++++++++++++++++++++++++++++++++++----
+ dlls/mmdevapi/devenum.c   | 167 ++++++++++++++++++++++++++++++++++----
  dlls/setupapi/devinst.c   |  32 +++++++-
- 3 files changed, 181 insertions(+), 18 deletions(-)
+ 3 files changed, 182 insertions(+), 19 deletions(-)
 
 diff --git a/dlls/mmdevapi/Makefile.in b/dlls/mmdevapi/Makefile.in
 index 90c2302ef50..cfdde576e39 100644
@@ -22,7 +22,7 @@ index 90c2302ef50..cfdde576e39 100644
  SOURCES = \
  	audiosessionmanager.c \
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 7d56715f62d..a01609aca0d 100644
+index 7d56715f62d..2681853eb50 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -36,6 +36,7 @@
@@ -274,7 +274,7 @@ index 7d56715f62d..a01609aca0d 100644
              MMDevice_SetPropValue(id, flow, &deviceinterface_key, &pv);
  
 -            set_driver_prop_value(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_ContainerId);
-+            if (FAILED(set_get_driver_prop_value(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_ContainerId, &container_id)))
++            if (FAILED(set_get_driver_prop_value(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_ContainerId, &container_id)) && state == DEVICE_STATE_ACTIVE)
 +                WARN("Failed to get and set container id\n");
  
              if (FAILED(set_driver_prop_value(id, flow, &PKEY_AudioEndpoint_FormFactor)))
@@ -289,6 +289,15 @@ index 7d56715f62d..a01609aca0d 100644
      if (setdefault)
      {
          if (flow == eRender)
+@@ -671,7 +804,7 @@ HRESULT load_devices_from_reg(void)
+         if (ret != ERROR_SUCCESS)
+             continue;
+         if (SUCCEEDED(CLSIDFromString(guidvalue, &guid))
+-            && SUCCEEDED(MMDevice_GetPropValue(&guid, curflow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv))
++            && SUCCEEDED(MMDevice_GetPropValue(&guid, curflow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv))
+             && pv.vt == VT_LPWSTR)
+         {
+             MMDevice_Create(pv.pwszVal, &guid, curflow,
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
 index f206e65579b..0c222d0c19d 100644
 --- a/dlls/setupapi/devinst.c

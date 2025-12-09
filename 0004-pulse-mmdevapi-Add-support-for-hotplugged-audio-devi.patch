@@ -1,4 +1,4 @@
-From c88c9a3a35768545a85f340294d5cceedb0f8c03 Mon Sep 17 00:00:00 2001
+From 3adc242674d58beb23ce888003af98bcbf0e80b4 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/9] pulse/mmdevapi: Add support for hotplugged audio devices
@@ -14,7 +14,7 @@ Subject: [PATCH 4/9] pulse/mmdevapi: Add support for hotplugged audio devices
  6 files changed, 865 insertions(+), 268 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index f12d28ad45a..d524856fc11 100644
+index 0a84389dc26..d2cdabe736b 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;

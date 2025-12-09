@@ -1,4 +1,4 @@
-From c82a52c2149fb04d27ecc6781305605e563c3f2b Mon Sep 17 00:00:00 2001
+From cee0e2c91a2ace270902aedea6b5a18b173e65ec Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
 Subject: [PATCH 5/9] mmdevapi: Call registered IMMNotificationClients when
@@ -9,7 +9,7 @@ Subject: [PATCH 5/9] mmdevapi: Call registered IMMNotificationClients when
  1 file changed, 132 insertions(+), 76 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index d524856fc11..eb1d6ef1791 100644
+index d2cdabe736b..cc4402692d0 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -89,8 +89,24 @@ static CRITICAL_SECTION_DEBUG device_list_cs_debug =
