@@ -1,4 +1,4 @@
-From 32736786a39a1fe8eed76135151df14b4e6e8665 Mon Sep 17 00:00:00 2001
+From 0e10ebac1f77af41969290978f36fcf1329513d7 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 17:11:04 -0400
 Subject: [PATCH 1/9] mmdevapi/setupapi: HACK: Set MMDevices properties in
@@ -6,9 +6,9 @@ Subject: [PATCH 1/9] mmdevapi/setupapi: HACK: Set MMDevices properties in
 
 ---
  dlls/mmdevapi/Makefile.in |   2 +-
- dlls/mmdevapi/devenum.c   | 150 ++++++++++++++++++++++++++++++++++----
+ dlls/mmdevapi/devenum.c   | 165 ++++++++++++++++++++++++++++++++++----
  dlls/setupapi/devinst.c   |  32 +++++++-
- 3 files changed, 169 insertions(+), 15 deletions(-)
+ 3 files changed, 181 insertions(+), 18 deletions(-)
 
 diff --git a/dlls/mmdevapi/Makefile.in b/dlls/mmdevapi/Makefile.in
 index 90c2302ef50..cfdde576e39 100644
@@ -22,7 +22,7 @@ index 90c2302ef50..cfdde576e39 100644
  SOURCES = \
  	audiosessionmanager.c \
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 7d56715f62d..7864fea3054 100644
+index 7d56715f62d..a01609aca0d 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -36,6 +36,7 @@
@@ -199,17 +199,19 @@ index 7d56715f62d..7864fea3054 100644
  /* Creates or updates the state of a device
   * If GUID is null, a random guid will be assigned
   * and the device will be created
-@@ -510,6 +624,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -510,6 +624,11 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
      HKEY key, root;
      MMDevice *device, *cur = NULL;
      WCHAR guidstr[39];
 +    PROPVARIANT container_id;
 +    WCHAR friendly_name[FRIENDLY_NAME_MAX];
-+    const WCHAR *friendly_name_fmt = flow == eRender ? L"Speakers (%ls)" : L"Microphone (%ls)";
++    const WCHAR *device_iname;
++    const WCHAR *device_desc = flow == eRender ? L"Speakers" : L"Microphone";
++    const WCHAR *friendly_name_fmt = L"%ls (%ls)";
  
      static const PROPERTYKEY deviceinterface_key = {
          {0x233164c8, 0x1b2c, 0x4c7d, {0xbc, 0x68, 0xb6, 0x71, 0x68, 0x7a, 0x25, 0x67}}, 1
-@@ -519,6 +636,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -519,6 +638,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          {0xb3f8fa53, 0x0004, 0x438e, {0x90, 0x03, 0x51, 0xa4, 0x6e, 0x13, 0x9b, 0xfc}}, 2
      };
  
@@ -218,7 +220,7 @@ index 7d56715f62d..7864fea3054 100644
      LIST_FOR_EACH_ENTRY(device, &device_list, MMDevice, entry)
      {
          if (device->flow == flow && IsEqualGUID(&device->devguid, id)){
-@@ -538,10 +657,11 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -538,10 +659,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
          list_add_tail(&device_list, &cur->entry);
      }else if(cur->ref > 0)
@@ -227,29 +229,47 @@ index 7d56715f62d..7864fea3054 100644
  
      free(cur->drv_id);
      cur->drv_id = wcsdup(name);
-+    swprintf(friendly_name, FRIENDLY_NAME_MAX, friendly_name_fmt, cur->drv_id);
++    device_iname = cur->drv_id;
++    swprintf(friendly_name, FRIENDLY_NAME_MAX, friendly_name_fmt, device_desc, device_iname);
  
      cur->flow = flow;
      cur->state = state;
-@@ -563,7 +683,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -562,9 +685,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+         {
              PROPVARIANT pv;
  
-             pv.vt = VT_LPWSTR;
+-            pv.vt = VT_LPWSTR;
 -            pv.pwszVal = cur->drv_id;
-+            pv.pwszVal = friendly_name;
- 
+-
              if (SUCCEEDED(set_driver_prop_value(id, flow, &devicepath_key))) {
                  PROPVARIANT pv2;
-@@ -573,7 +693,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+ 
+@@ -572,21 +692,31 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+ 
                  if (SUCCEEDED(MMDevice_GetPropValue(id, flow, &devicepath_key, &pv2)) && pv2.vt == VT_LPWSTR) {
                      const WCHAR *override;
-                     if ((override = find_product_name_override(pv2.pwszVal)) != NULL)
+-                    if ((override = find_product_name_override(pv2.pwszVal)) != NULL)
 -                        pv.pwszVal = (WCHAR*) override;
-+                        swprintf(friendly_name, FRIENDLY_NAME_MAX, friendly_name_fmt, override);
++                    if ((override = find_product_name_override(pv2.pwszVal)) != NULL) {
++                        device_iname = override;
++                        swprintf(friendly_name, FRIENDLY_NAME_MAX, friendly_name_fmt, device_desc, device_iname);
++                    }
                  }
  
                  PropVariantClear(&pv2);
-@@ -586,7 +706,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+             }
+ 
++            pv.vt = VT_LPWSTR;
++
++            pv.pwszVal = friendly_name;
+             MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
++
++            pv.pwszVal = (LPWSTR)device_iname;
+             MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
++
++            pv.pwszVal = (LPWSTR)device_desc;
+             MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
+ 
              pv.pwszVal = guidstr;
              MMDevice_SetPropValue(id, flow, &deviceinterface_key, &pv);
  
@@ -259,7 +279,7 @@ index 7d56715f62d..7864fea3054 100644
  
              if (FAILED(set_driver_prop_value(id, flow, &PKEY_AudioEndpoint_FormFactor)))
              {
-@@ -614,6 +735,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -614,6 +744,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          RegCloseKey(key);
      }
  
