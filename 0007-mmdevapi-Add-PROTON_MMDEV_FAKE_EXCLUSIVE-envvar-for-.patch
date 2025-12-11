@@ -1,16 +1,16 @@
-From 959889493999c8465c41a3de30a6ddfcd0020001 Mon Sep 17 00:00:00 2001
+From 897e70886e76916cc5523740cef46458ae5407a2 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
 Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
  faking exclusive audio device support.
 
 ---
- dlls/mmdevapi/client.c     | 42 ++++++++++++++++++++++++++++++++------
+ dlls/mmdevapi/client.c     | 36 +++++++++++++++++++++++++++++++-----
  dlls/winepulse.drv/pulse.c |  2 ++
- 2 files changed, 38 insertions(+), 6 deletions(-)
+ 2 files changed, 33 insertions(+), 5 deletions(-)
 
 diff --git a/dlls/mmdevapi/client.c b/dlls/mmdevapi/client.c
-index 07390b16527..7fa3281003d 100644
+index 07390b16527..4f12315e27e 100644
 --- a/dlls/mmdevapi/client.c
 +++ b/dlls/mmdevapi/client.c
 @@ -50,6 +50,20 @@ extern HRESULT get_audio_session(const GUID *sessionguid, IMMDevice *device, UIN
@@ -44,7 +44,7 @@ index 07390b16527..7fa3281003d 100644
      return stream_init(This, TRUE, mode, flags, duration, period, fmt, sessionguid);
  }
  
-@@ -757,31 +774,44 @@ static HRESULT WINAPI client_IsFormatSupported(IAudioClient3 *iface, AUDCLNT_SHA
+@@ -757,31 +774,40 @@ static HRESULT WINAPI client_IsFormatSupported(IAudioClient3 *iface, AUDCLNT_SHA
  {
      struct audio_client *This = impl_from_IAudioClient3(iface);
      struct is_format_supported_params params;
@@ -73,10 +73,7 @@ index 07390b16527..7fa3281003d 100644
 -            params.fmt_out = CoTaskMemAlloc(sizeof(*params.fmt_out));
 -    }
 +
-+    if (
-+        (out || fake_exclusive) &&
-+        mode == AUDCLNT_SHAREMODE_SHARED
-+    )
++    if ((out && mode == AUDCLNT_SHAREMODE_SHARED) || fake_exclusive)
 +        params.fmt_out = CoTaskMemAlloc(sizeof(*params.fmt_out));
  
      wine_unix_call(is_format_supported, &params);
@@ -84,13 +81,11 @@ index 07390b16527..7fa3281003d 100644
 -    if (params.result == S_FALSE)
 +    if (out && params.result == S_FALSE)
          *out = &params.fmt_out->Format;
--    else
-+    else {
+     else
          CoTaskMemFree(params.fmt_out);
  
-+        if (fake_exclusive && params.result == S_FALSE)
-+            params.result = AUDCLNT_E_UNSUPPORTED_FORMAT;
-+    }
++    if (fake_exclusive && params.result == S_FALSE)
++        params.result = AUDCLNT_E_UNSUPPORTED_FORMAT;
 +
      return params.result;
  }
