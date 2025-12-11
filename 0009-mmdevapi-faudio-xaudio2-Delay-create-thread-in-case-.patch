@@ -1,21 +1,22 @@
-From d12b8fecaea4a3b87b3e76f53faeabbf60c8be2e Mon Sep 17 00:00:00 2001
+From 7c8dfc7bcfe6f2befa29d816fa56f048ffd7c76a Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
-Subject: [PATCH 10/14] mmdevapi/faudio/xaudio2: Delay create thread in case of
- functions being called in dllmain.
+Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
+ functions being called in dllmain; delay kernelbase resolve; get default
+ audio endpoint directly.
 
 ---
  dlls/mmdevapi/devenum.c                 |   7 +-
  libs/faudio/src/FAudio.c                |   4 +
  libs/faudio/src/FAudio_internal.h       |   1 +
- libs/faudio/src/FAudio_platform_win32.c | 145 +++++++++++++++---------
- 4 files changed, 99 insertions(+), 58 deletions(-)
+ libs/faudio/src/FAudio_platform_win32.c | 180 +++++++++++++++---------
+ 4 files changed, 120 insertions(+), 72 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index cc4402692d0..adc1d5c198e 100644
+index 4adab5a95a2..342f8bf14de 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -1515,9 +1515,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1518,9 +1518,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -25,7 +26,7 @@ index cc4402692d0..adc1d5c198e 100644
      return S_OK;
  }
  
-@@ -1847,6 +1844,10 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1850,6 +1847,10 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
@@ -64,7 +65,7 @@ index ec8301e1025..862f4bdb04f 100644
  
  uint32_t FAudio_PlatformGetDeviceCount(void);
 diff --git a/libs/faudio/src/FAudio_platform_win32.c b/libs/faudio/src/FAudio_platform_win32.c
-index 3168cbfc50a..6823bcf075c 100644
+index 3168cbfc50a..c3c7f037d72 100644
 --- a/libs/faudio/src/FAudio_platform_win32.c
 +++ b/libs/faudio/src/FAudio_platform_win32.c
 @@ -50,13 +50,6 @@ static CRITICAL_SECTION faudio_cs = { NULL, -1, 0, 0, 0, 0 };
@@ -99,7 +100,67 @@ index 3168cbfc50a..6823bcf075c 100644
  void FAudio_Log(char const *msg)
  {
  	OutputDebugStringA(msg);
-@@ -395,6 +399,70 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+@@ -76,6 +80,12 @@ static HRESULT (WINAPI *my_SetThreadDescription)(HANDLE, PCWSTR) = NULL;
+ 
+ static void FAudio_resolve_SetThreadDescription(void)
+ {
++	EnterCriticalSection(&faudio_cs);
++	if (my_SetThreadDescription) {
++		LeaveCriticalSection(&faudio_cs);
++		return;
++	}
++
+ 	kernelbase = LoadLibraryA("kernelbase.dll");
+ 	if (!kernelbase)
+ 		return;
+@@ -86,6 +96,7 @@ static void FAudio_resolve_SetThreadDescription(void)
+ 		FreeLibrary(kernelbase);
+ 		kernelbase = NULL;
+ 	}
++	LeaveCriticalSection(&faudio_cs);
+ }
+ 
+ static void FAudio_set_thread_name(char const *name)
+@@ -93,6 +104,9 @@ static void FAudio_set_thread_name(char const *name)
+ 	int ret;
+ 	WCHAR *nameW;
+ 
++	if (!my_SetThreadDescription)
++		FAudio_resolve_SetThreadDescription();
++
+ 	if (!my_SetThreadDescription)
+ 		return;
+ 
+@@ -353,6 +367,16 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+ 		);
+ 	}
+ 
++	if (deviceIndex == 0) {
++		/* Default device. */
++		return IMMDeviceEnumerator_GetDefaultAudioEndpoint(
++			device_enumerator,
++			eRender,
++			eConsole,
++			device
++		);
++	}
++
+ 	hr = IMMDeviceEnumerator_EnumAudioEndpoints(
+ 		device_enumerator,
+ 		eRender,
+@@ -372,10 +396,7 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+ 		return hr;
+ 	}
+ 
+-	if (deviceIndex == 0) {
+-		/* Default device. */
+-		actualIndex = defaultDeviceIndex;
+-	} else if (deviceIndex == defaultDeviceIndex) {
++	if (deviceIndex == defaultDeviceIndex) {
+ 		/* Open the device at index 0 instead of the "correct" one. */
+ 		actualIndex = 0;
+ 	} else {
+@@ -395,6 +416,70 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
  	return hr;
  }
  
@@ -170,7 +231,7 @@ index 3168cbfc50a..6823bcf075c 100644
  void FAudio_PlatformInit(
  	FAudio *audio,
  	uint32_t flags,
-@@ -406,11 +474,9 @@ void FAudio_PlatformInit(
+@@ -406,11 +491,9 @@ void FAudio_PlatformInit(
  ) {
  	struct FAudioAudioClientThreadArgs *args;
  	struct FAudioWin32PlatformData *data;
@@ -182,7 +243,15 @@ index 3168cbfc50a..6823bcf075c 100644
  	BOOL has_sse2 = IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE);
  #if defined(__aarch64__) || defined(_M_ARM64) || defined(__arm64ec__) || defined(_M_ARM64EC)
  	BOOL has_neon = TRUE;
-@@ -456,20 +522,10 @@ void FAudio_PlatformInit(
+@@ -420,7 +503,6 @@ void FAudio_PlatformInit(
+ 	BOOL has_neon = FALSE;
+ #endif
+ 	FAudio_INTERNAL_InitSIMDFunctions(has_sse2, has_neon);
+-	FAudio_resolve_SetThreadDescription();
+ 
+ 	FAudio_PlatformAddRef();
+ 
+@@ -456,20 +538,10 @@ void FAudio_PlatformInit(
  		);
  	}
  
@@ -204,7 +273,7 @@ index 3168cbfc50a..6823bcf075c 100644
  
  	hr = IMMDevice_Activate(
  		device,
-@@ -483,8 +539,8 @@ void FAudio_PlatformInit(
+@@ -483,8 +555,8 @@ void FAudio_PlatformInit(
  		goto fail_device;
  	IMMDevice_Release(device);
  
@@ -215,7 +284,7 @@ index 3168cbfc50a..6823bcf075c 100644
  
  	hr = IAudioClient_IsFormatSupported(
  		data->client,
-@@ -503,24 +559,6 @@ void FAudio_PlatformInit(
+@@ -503,24 +575,6 @@ void FAudio_PlatformInit(
  		CoTaskMemFree(closest);
  	}
  
@@ -240,7 +309,7 @@ index 3168cbfc50a..6823bcf075c 100644
  	mixFormat->Format.wFormatTag = args->format.Format.wFormatTag;
  	mixFormat->Format.nChannels = args->format.Format.nChannels;
  	mixFormat->Format.nSamplesPerSec = args->format.Format.nSamplesPerSec;
-@@ -544,18 +582,13 @@ void FAudio_PlatformInit(
+@@ -544,18 +598,13 @@ void FAudio_PlatformInit(
  		mixFormat->Format.cbSize = sizeof(FAudioWaveFormatEx);
  	}
  
@@ -263,7 +332,7 @@ index 3168cbfc50a..6823bcf075c 100644
  	*updateSize = args->updateSize;
  	*platformDevice = data;
  	return;
-@@ -564,10 +597,6 @@ fail_audio:
+@@ -564,10 +613,6 @@ fail_audio:
  	IAudioClient_Release(data->client);
  fail_device:
  	IMMDevice_Release(device);
@@ -274,7 +343,7 @@ index 3168cbfc50a..6823bcf075c 100644
  fail_free_data:
  	FAudio_free(data);
  fail_free_args:
-@@ -581,8 +610,14 @@ void FAudio_PlatformQuit(void* platformDevice)
+@@ -581,8 +626,14 @@ void FAudio_PlatformQuit(void* platformDevice)
  {
  	struct FAudioWin32PlatformData *data = platformDevice;
  
@@ -291,6 +360,22 @@ index 3168cbfc50a..6823bcf075c 100644
  	if (data->client) IAudioClient_Release(data->client);
  	if (kernelbase)
  	{
+@@ -712,15 +763,6 @@ uint32_t FAudio_PlatformGetDeviceDetails(
+ 		IMMDevice_Release(device);
+ 		device = NULL;
+ 	}
+-	else
+-	{
+-		count = FAudio_PlatformGetDeviceCount();
+-		if (index >= count)
+-		{
+-			ret = FAUDIO_E_INVALID_CALL;
+-			goto fail_release;
+-		}
+-	}
+ 
+ 	hr = FAudio_OpenDevice(index, deviceId, &device);
+ 	if (FAILED(hr))
 -- 
 2.52.0
 

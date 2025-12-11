@@ -1,20 +1,20 @@
-From 623a9153c4230bbd73417a51b3b924edd5a21050 Mon Sep 17 00:00:00 2001
+From 48191ba87579fe86b80e58aaf09bea38b854d473 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
-Subject: [PATCH 04/14] pulse/mmdevapi: Add support for hotplugged audio
+Subject: [PATCH 4/9] winepulse/mmdevapi: Add support for hotplugged audio
  devices to be updated in the device list.
 
 ---
- dlls/mmdevapi/devenum.c          | 181 +++++-
+ dlls/mmdevapi/devenum.c          | 186 ++++++-
  dlls/mmdevapi/main.c             |   1 +
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
- dlls/winepulse.drv/pulse.c       | 921 ++++++++++++++++++++++---------
- 6 files changed, 865 insertions(+), 268 deletions(-)
+ dlls/winepulse.drv/pulse.c       | 926 ++++++++++++++++++++++---------
+ 6 files changed, 872 insertions(+), 271 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 0a84389dc26..d2cdabe736b 100644
+index 0a84389dc26..9b275c95a64 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -85,7 +85,19 @@ index 0a84389dc26..d2cdabe736b 100644
      }
      return cur;
  }
-@@ -866,34 +883,151 @@ static HRESULT set_format(MMDevice *dev)
+@@ -776,7 +793,10 @@ HRESULT load_devices_from_reg(void)
+     curflow = eCapture;
+     if (ret != ERROR_SUCCESS)
+     {
+-        RegCloseKey(key_capture);
++        if (key_render)
++            RegCloseKey(key_render);
++        if (key_capture)
++            RegCloseKey(key_capture);
+         key_render = key_capture = NULL;
+         WARN("Couldn't create key: %lu\n", ret);
+         return E_FAIL;
+@@ -866,34 +886,151 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -249,7 +261,7 @@ index 0a84389dc26..d2cdabe736b 100644
  
  end:
      free(params.endpoints);
-@@ -1069,7 +1203,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1069,7 +1206,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
@@ -258,7 +270,7 @@ index 0a84389dc26..d2cdabe736b 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1159,6 +1293,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1159,6 +1296,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -266,7 +278,7 @@ index 0a84389dc26..d2cdabe736b 100644
      LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
      {
          if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1168,8 +1303,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1168,8 +1306,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      if (This->devices_count)
      {
          This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
@@ -278,7 +290,7 @@ index 0a84389dc26..d2cdabe736b 100644
  
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
-@@ -1181,6 +1318,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1181,6 +1321,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
              }
          }
      }
@@ -286,7 +298,7 @@ index 0a84389dc26..d2cdabe736b 100644
  
      return S_OK;
  }
-@@ -1280,8 +1418,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
+@@ -1280,8 +1421,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
      MMDevice *device, *next;
@@ -298,7 +310,7 @@ index 0a84389dc26..d2cdabe736b 100644
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
      key_render = key_capture = NULL;
-@@ -1302,6 +1443,9 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1302,6 +1446,9 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -308,7 +320,7 @@ index 0a84389dc26..d2cdabe736b 100644
      return S_OK;
  }
  
-@@ -1407,10 +1551,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1407,10 +1554,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -321,7 +333,7 @@ index 0a84389dc26..d2cdabe736b 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1434,6 +1580,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1434,6 +1583,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          return S_OK;
      }
  
@@ -329,7 +341,7 @@ index 0a84389dc26..d2cdabe736b 100644
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1448,6 +1595,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1448,6 +1598,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -337,7 +349,7 @@ index 0a84389dc26..d2cdabe736b 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1455,6 +1603,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1455,6 +1606,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -345,7 +357,7 @@ index 0a84389dc26..d2cdabe736b 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1467,7 +1616,6 @@ struct NotificationClientWrapper {
+@@ -1467,7 +1619,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
@@ -353,7 +365,7 @@ index 0a84389dc26..d2cdabe736b 100644
  static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
  {
      0, 0, &g_notif_lock,
-@@ -1828,6 +1976,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
+@@ -1828,6 +1979,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
          if (!pv->pwszVal)
              return E_OUTOFMEMORY;
          StringFromGUID2(&This->parent->devguid, pv->pwszVal, 39);
@@ -469,7 +481,7 @@ index 0617c5977c9..8d913cd6af1 100644
              return TRUE;
          }
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 85062ead684..30cc99d7522 100644
+index 85062ead684..1c92995d044 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
 @@ -124,6 +124,19 @@ typedef struct _PhysDevice {
@@ -698,14 +710,14 @@ index 85062ead684..30cc99d7522 100644
 -    unsigned int offset;
      PhysDevice *dev;
 +    size_t len, name_len;
- 
--    params->num = list_count(list);
--    offset = needed = params->num * sizeof(*params->endpoints);
++
 +    LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
 +        name_len = lstrlenW(dev->name) + 1;
 +        len = strlen(dev->pulse_name) + 1;
 +        *needed += name_len * sizeof(WCHAR) + ((len + 1) & ~1);
-+
+ 
+-    params->num = list_count(list);
+-    offset = needed = params->num * sizeof(*params->endpoints);
 +        if (*needed > size)
 +            return FALSE;
 +    }
@@ -957,6 +969,19 @@ index 85062ead684..30cc99d7522 100644
  static UINT pulse_channel_map_to_channel_mask(const pa_channel_map *map)
  {
      int i;
+@@ -633,10 +824,10 @@ static GUID get_container_id(const char *sysfs_path)
+     create_usb_dev_container_id(init_time, vid, pid, bus_num, dev_num, &tmp_guid);
+ 
+ exit:
+-    if (udev)
+-        udev_unref(udev);
+     if (audio_dev)
+         udev_device_unref(audio_dev);
++    if (udev)
++        udev_unref(udev);
+ 
+     TRACE("Returning %s.\n", debugstr_guid(&tmp_guid));
+     return tmp_guid;
 @@ -679,58 +870,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
          dev->container_id = get_container_id(buffer);
  }
@@ -1016,7 +1041,7 @@ index 85062ead684..30cc99d7522 100644
  /* For most hardware on Windows, users must choose a configuration with an even
   * number of channels (stereo, quad, 5.1, 7.1). Users can then disable
   * channels, but those channels are still reported to applications from
-@@ -814,80 +953,366 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
+@@ -814,80 +953,367 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
      fmt->dwChannelMask = pa_mask;
  }
  
@@ -1043,7 +1068,7 @@ index 85062ead684..30cc99d7522 100644
 +                pa_stream_unref(stream);
 +                dev->probe_status = -1;
 +                pulse_dev_set_ready(dev);
-+                TRACE("probe error: %px, %d\n", dev, state);
++                TRACE("probe error: %p, %d\n", dev, state);
 +            }
 +        }
 +    } else if (dev->probe_status == PA_STREAM_READY) {
@@ -1326,6 +1351,18 @@ index 85062ead684..30cc99d7522 100644
 -        fmt->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
 +        case PA_CONTEXT_READY:
 +            TRACE("Ready\n");
++            free_phys_device_lists();
++            /* Burnout Paradise Remastered expects device name to have a space. */
++            pulse_add_device(eRender, NULL, 0, Speakers, 0, "", "PulseAudio Output");
++            pulse_add_device(eCapture, NULL, 0, Microphone, 0, "", "PulseAudio Input");
++
++            o = pa_context_get_sink_info_list(c, &pulse_phys_speakers_cb, NULL);
++            if (o)
++                pa_operation_unref(o);
++            o = pa_context_get_source_info_list(c, &pulse_phys_sources_cb, NULL);
++            if (o)
++                pa_operation_unref(o);
++
 +            pa_context_set_subscribe_callback(c, pulse_subscribecallback, userdata);
 +            o = pa_context_subscribe(
 +                c,
@@ -1335,17 +1372,6 @@ index 85062ead684..30cc99d7522 100644
 +            if (o)
 +                pa_operation_unref(o);
 +
-+            free_phys_device_lists();
-+            /* Burnout Paradise Remastered expects device name to have a space. */
-+            pulse_add_device(eRender, NULL, 0, Speakers, 0, "", "PulseAudio Output");
-+            pulse_add_device(eCapture, NULL, 0, Microphone, 0, "", "PulseAudio Input");
-+
-+            o = pa_context_get_sink_info_list(pulse_ctx, &pulse_phys_speakers_cb, NULL);
-+            if (o)
-+                pa_operation_unref(o);
-+            o = pa_context_get_source_info_list(pulse_ctx, &pulse_phys_sources_cb, NULL);
-+            if (o)
-+                pa_operation_unref(o);
 +            break;
 +
 +        case PA_CONTEXT_FAILED:
@@ -1431,7 +1457,7 @@ index 85062ead684..30cc99d7522 100644
  }
  
  /* some poorly-behaved applications call audio functions during DllMain, so we
-@@ -897,35 +1322,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
+@@ -897,35 +1323,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
  static NTSTATUS pulse_test_connect(void *args)
  {
      struct test_connect_params *params = args;
@@ -1490,7 +1516,7 @@ index 85062ead684..30cc99d7522 100644
      /* Wait for connection */
      while (pa_mainloop_iterate(pulse_ml, 1, &ret) >= 0) {
          pa_context_state_t state = pa_context_get_state(pulse_ctx);
-@@ -944,53 +1376,24 @@ static NTSTATUS pulse_test_connect(void *args)
+@@ -944,53 +1377,24 @@ static NTSTATUS pulse_test_connect(void *args)
          pa_context_get_server(pulse_ctx),
          pa_context_get_server_protocol_version(pulse_ctx));
  
@@ -1553,7 +1579,7 @@ index 85062ead684..30cc99d7522 100644
      pulse_unlock();
      params->priority = Priority_Unavailable;
      return STATUS_SUCCESS;
-@@ -1214,6 +1617,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1214,6 +1618,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
          return E_POINTER;
      }
  
@@ -1561,7 +1587,7 @@ index 85062ead684..30cc99d7522 100644
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
          if (strcmp(pulse_name, dev->pulse_name))
              continue;
-@@ -1222,8 +1626,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1222,8 +1627,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
              *def = dev->def_period;
          if (min)
              *min = dev->min_period;
@@ -1573,7 +1599,7 @@ index 85062ead684..30cc99d7522 100644
  
      return E_FAIL;
  }
-@@ -2410,15 +2817,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
+@@ -2410,15 +2818,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1592,7 +1618,7 @@ index 85062ead684..30cc99d7522 100644
  
      params->result = E_FAIL;
      return STATUS_SUCCESS;
-@@ -2720,17 +3129,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2720,17 +3130,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1615,7 +1641,7 @@ index 85062ead684..30cc99d7522 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              case 3:   /* PhysicalSpeakers */
-@@ -2738,6 +3152,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2738,6 +3153,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
                      goto fail;
                  params->value->vt = VT_UI4;
                  params->value->ulVal = dev->channel_mask;
@@ -1624,7 +1650,7 @@ index 85062ead684..30cc99d7522 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              }
-@@ -2752,14 +3168,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2752,14 +3169,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
                  params->result = S_OK;
              }
  

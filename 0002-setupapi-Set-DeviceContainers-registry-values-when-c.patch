@@ -1,18 +1,18 @@
-From 880de6e94fa29c358709d60bf07f5cad1052543a Mon Sep 17 00:00:00 2001
+From 76c716cc8bdc0e1c5a747f4f4e8cc852bdb62427 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
-Subject: [PATCH 02/14] setupapi: Set DeviceContainers registry values when
+Subject: [PATCH 2/9] setupapi: Set DeviceContainers registry values when
  container ids are set.
 
 ---
- dlls/setupapi/devinst.c | 105 ++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 105 insertions(+)
+ dlls/setupapi/devinst.c | 106 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 106 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 0c222d0c19d..75ce560fa06 100644
+index 0c222d0c19d..09ba7db0841 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -656,9 +656,111 @@ static const struct PropertyMapEntry PropertyMap[] = {
+@@ -656,9 +656,112 @@ static const struct PropertyMapEntry PropertyMap[] = {
  };
  #undef PROPERTY_MAP_ENTRY
  
@@ -60,9 +60,10 @@ index 0c222d0c19d..75ce560fa06 100644
 +                    {
 +                        if (!RegOpenKeyW(key2, container, &key3))
 +                        {
++                            DWORD cValues = 0;
 +                            TRACE("Deleting instance id from device containers: %s, %ls\n", debugstr_w(device->instanceId), container);
 +                            RegDeleteValueW(key3, device->instanceId);
-+                            remove = RegEnumValueW(key3, 0, data, &data_size, NULL, NULL, NULL, NULL) == ERROR_NO_MORE_ITEMS;
++                            remove = !RegQueryInfoKeyW(key3, NULL, NULL, NULL, NULL, NULL, NULL, &cValues, NULL, NULL, NULL, NULL) && !cValues;
 +                            RegCloseKey(key3);
 +                            if (remove)
 +                                remove = !RegDeleteKeyW(key2, container);
@@ -124,7 +125,7 @@ index 0c222d0c19d..75ce560fa06 100644
      if (prop < ARRAY_SIZE(PropertyMap) && PropertyMap[prop].nameW)
      {
          LONG ret = RegSetValueExW(device->key, PropertyMap[prop].nameW, 0,
-@@ -3670,6 +3772,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
+@@ -3670,6 +3773,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
      if (!(device = get_device(devinfo, device_data)))
          return FALSE;
  

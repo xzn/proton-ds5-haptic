@@ -1,30 +1,45 @@
-From 3faaac2b0a106e7a0aa8206806f3723ded2d4fe0 Mon Sep 17 00:00:00 2001
+From c519b8c9cd990f3fbaddbaf19089b75973234d59 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
-Subject: [PATCH 06/14] setupapi: SetupDiGetDeviceRegistryProperty now returns
- all lower case for SPDRP_BASE_CONTAINERID.
+Subject: [PATCH 6/9] setupapi: SetupDiGetDeviceRegistryProperty now returns
+ all lower case for SPDRP_BASE_CONTAINERID; SetupDiGetDeviceRegistryPropertyA
+ should return wide string for type GUID.
 
 ---
- dlls/setupapi/devinst.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ dlls/setupapi/devinst.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 75ce560fa06..ec3ae01d195 100644
+index 09ba7db0841..12b3e9f0374 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -3711,7 +3711,11 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
-             SetLastError(l);
+@@ -3699,7 +3699,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+     if (Property < ARRAY_SIZE(PropertyMap) && PropertyMap[Property].nameA)
+     {
+         DWORD size = PropertyBufferSize;
+-        LONG l = RegQueryValueExA(device->key, PropertyMap[Property].nameA,
++        LONG l;
++
++        /* Despite GUID returned as REG_SZ, it's always wide string on Windows. */
++        if (PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
++            return SetupDiGetDeviceRegistryPropertyW(
++                devinfo, device_data, Property, PropertyRegDataType,
++                PropertyBuffer, PropertyBufferSize, RequiredSize
++            );
++
++        l = RegQueryValueExA(device->key, PropertyMap[Property].nameA,
+                 NULL, PropertyRegDataType, PropertyBuffer, &size);
+ 
+         if (l == ERROR_FILE_NOT_FOUND)
+@@ -3713,6 +3722,7 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
          if (RequiredSize)
              *RequiredSize = size;
-+
-+        if (ret && PropertyMap[Property].devPropType == DEVPROP_TYPE_GUID)
-+            _strlwr((LPSTR)PropertyBuffer);
      }
 +
      return ret;
  }
  
-@@ -3753,7 +3757,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+@@ -3754,7 +3764,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
              SetLastError(l);
          if (RequiredSize)
              *RequiredSize = size;

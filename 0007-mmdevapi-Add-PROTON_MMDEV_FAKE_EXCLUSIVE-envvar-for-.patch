@@ -1,7 +1,7 @@
-From 49ba9cac3d606c66ecfafa1e88cb004675bf781a Mon Sep 17 00:00:00 2001
+From d2bc5b01ef6f163476efc4b508804c38dbbaae21 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
-Subject: [PATCH 07/14] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
+Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
  faking exclusive audio device support.
 
 ---
@@ -96,10 +96,10 @@ index 07390b16527..7fa3281003d 100644
  }
  
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 30cc99d7522..ecf80bdb724 100644
+index 1c92995d044..56dbd262a28 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
-@@ -2723,6 +2723,8 @@ static NTSTATUS pulse_is_format_supported(void *args)
+@@ -2724,6 +2724,8 @@ static NTSTATUS pulse_is_format_supported(void *args)
                                               AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED;
          else if (params->result == S_FALSE)
              params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;

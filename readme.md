@@ -6,10 +6,10 @@ For haptic in Stellar Blade and Spider-Man Remastered/Miles Morales:
 
 For haptic when controller is hotplugged:
 
-- 0004-pulse-mmdevapi-Add-support-for-hotplugged-audio-devi.patch
+- 0004-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
 - 0005-mmdevapi-Call-registered-IMMNotificationClients-when.patch
 
-For Death Stranding Director's Cut:
+For haptic in Death Stranding Director's Cut and God of War Ragnarok:
 
 - 0006-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
 - 0007-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
@@ -18,9 +18,9 @@ For DSDC crash when controller hotplug patched:
 
 - 0008-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
 
-For God of War Ragnarok
+Misc changes:
 
-- 0009-setupapi-SetupDiGetDeviceRegistryPropertyA-should-re.patch
+- 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-in-case-.patch
 
 Note:
 
@@ -30,6 +30,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-11 Rebased patches
 - 2025-12-10 Misc changes attempt to the same fix
 - 2025-12-10 Delay thread creation as an attempt to fix xaudio2_9.dll load crash.
 - 2025-12-09 Fix wrong lock location in mmdevcol init
