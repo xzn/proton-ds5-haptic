@@ -30,6 +30,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-10 Misc changes attempt to the same fix
 - 2025-12-10 Delay thread creation as an attempt to fix xaudio2_9.dll load crash.
 - 2025-12-09 Fix wrong lock location in mmdevcol init
 - 2025-12-09 Do not create thread in mmdev init (for hotplugged audio device support)

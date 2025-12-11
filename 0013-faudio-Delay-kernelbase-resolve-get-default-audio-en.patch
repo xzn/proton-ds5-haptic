@@ -1,0 +1,101 @@
+From 2eb0059bd93e66722356a6d0f0728c6b8aee11a1 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Thu, 11 Dec 2025 01:31:27 -0400
+Subject: [PATCH 13/14] faudio: Delay kernelbase resolve; get default audio
+ endpoint directly.
+
+---
+ libs/faudio/src/FAudio_platform_win32.c | 35 +++++++++++++++----------
+ 1 file changed, 21 insertions(+), 14 deletions(-)
+
+diff --git a/libs/faudio/src/FAudio_platform_win32.c b/libs/faudio/src/FAudio_platform_win32.c
+index 6823bcf075c..c3c7f037d72 100644
+--- a/libs/faudio/src/FAudio_platform_win32.c
++++ b/libs/faudio/src/FAudio_platform_win32.c
+@@ -80,6 +80,12 @@ static HRESULT (WINAPI *my_SetThreadDescription)(HANDLE, PCWSTR) = NULL;
+ 
+ static void FAudio_resolve_SetThreadDescription(void)
+ {
++	EnterCriticalSection(&faudio_cs);
++	if (my_SetThreadDescription) {
++		LeaveCriticalSection(&faudio_cs);
++		return;
++	}
++
+ 	kernelbase = LoadLibraryA("kernelbase.dll");
+ 	if (!kernelbase)
+ 		return;
+@@ -90,6 +96,7 @@ static void FAudio_resolve_SetThreadDescription(void)
+ 		FreeLibrary(kernelbase);
+ 		kernelbase = NULL;
+ 	}
++	LeaveCriticalSection(&faudio_cs);
+ }
+ 
+ static void FAudio_set_thread_name(char const *name)
+@@ -97,6 +104,9 @@ static void FAudio_set_thread_name(char const *name)
+ 	int ret;
+ 	WCHAR *nameW;
+ 
++	if (!my_SetThreadDescription)
++		FAudio_resolve_SetThreadDescription();
++
+ 	if (!my_SetThreadDescription)
+ 		return;
+ 
+@@ -357,6 +367,16 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+ 		);
+ 	}
+ 
++	if (deviceIndex == 0) {
++		/* Default device. */
++		return IMMDeviceEnumerator_GetDefaultAudioEndpoint(
++			device_enumerator,
++			eRender,
++			eConsole,
++			device
++		);
++	}
++
+ 	hr = IMMDeviceEnumerator_EnumAudioEndpoints(
+ 		device_enumerator,
+ 		eRender,
+@@ -376,10 +396,7 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+ 		return hr;
+ 	}
+ 
+-	if (deviceIndex == 0) {
+-		/* Default device. */
+-		actualIndex = defaultDeviceIndex;
+-	} else if (deviceIndex == defaultDeviceIndex) {
++	if (deviceIndex == defaultDeviceIndex) {
+ 		/* Open the device at index 0 instead of the "correct" one. */
+ 		actualIndex = 0;
+ 	} else {
+@@ -486,7 +503,6 @@ void FAudio_PlatformInit(
+ 	BOOL has_neon = FALSE;
+ #endif
+ 	FAudio_INTERNAL_InitSIMDFunctions(has_sse2, has_neon);
+-	FAudio_resolve_SetThreadDescription();
+ 
+ 	FAudio_PlatformAddRef();
+ 
+@@ -747,15 +763,6 @@ uint32_t FAudio_PlatformGetDeviceDetails(
+ 		IMMDevice_Release(device);
+ 		device = NULL;
+ 	}
+-	else
+-	{
+-		count = FAudio_PlatformGetDeviceCount();
+-		if (index >= count)
+-		{
+-			ret = FAUDIO_E_INVALID_CALL;
+-			goto fail_release;
+-		}
+-	}
+ 
+ 	hr = FAudio_OpenDevice(index, deviceId, &device);
+ 	if (FAILED(hr))
+-- 
+2.52.0
+

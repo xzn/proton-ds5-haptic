@@ -1,7 +1,7 @@
 From 4f3ceb3470fee1f49395b97836e0f76f77aee90b Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 8 Dec 2025 14:13:12 -0400
-Subject: [PATCH 09/10] setupapi: SetupDiGetDeviceRegistryPropertyA should
+Subject: [PATCH 09/14] setupapi: SetupDiGetDeviceRegistryPropertyA should
  return wide string for type GUID.
 
 ---

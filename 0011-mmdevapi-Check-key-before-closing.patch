@@ -1,0 +1,28 @@
+From 5f0486cfa40c6882e6a6ca0048d1b8640e83ee58 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Thu, 11 Dec 2025 01:29:24 -0400
+Subject: [PATCH 11/14] mmdevapi: Check key before closing.
+
+---
+ dlls/mmdevapi/devenum.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
+index adc1d5c198e..342f8bf14de 100644
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -903,7 +903,10 @@ HRESULT load_devices_from_reg(void)
+     curflow = eCapture;
+     if (ret != ERROR_SUCCESS)
+     {
+-        RegCloseKey(key_capture);
++        if (key_render)
++            RegCloseKey(key_render);
++        if (key_capture)
++            RegCloseKey(key_capture);
+         key_render = key_capture = NULL;
+         WARN("Couldn't create key: %lu\n", ret);
+         return E_FAIL;
+-- 
+2.52.0
+

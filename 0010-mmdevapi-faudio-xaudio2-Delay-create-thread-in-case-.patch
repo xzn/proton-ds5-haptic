@@ -1,7 +1,7 @@
 From d12b8fecaea4a3b87b3e76f53faeabbf60c8be2e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
-Subject: [PATCH 10/10] mmdevapi/faudio/xaudio2: Delay create thread in case of
+Subject: [PATCH 10/14] mmdevapi/faudio/xaudio2: Delay create thread in case of
  functions being called in dllmain.
 
 ---

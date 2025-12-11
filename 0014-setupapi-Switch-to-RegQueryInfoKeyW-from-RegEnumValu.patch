@@ -1,0 +1,30 @@
+From ffbcb68fa7327f2ff805dc429da474920cabcc30 Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Thu, 11 Dec 2025 01:36:08 -0400
+Subject: [PATCH 14/14] setupapi: Switch to RegQueryInfoKeyW from
+ RegEnumValueW, which seemed to cause ntdll.dll loader to have corrupt
+ entries.
+
+---
+ dlls/setupapi/devinst.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
+index 8256b7e6726..12b3e9f0374 100644
+--- a/dlls/setupapi/devinst.c
++++ b/dlls/setupapi/devinst.c
+@@ -700,9 +700,10 @@ static void SETUPDI_UpdateDeviceContainersW(struct device *device, const BYTE *b
+                     {
+                         if (!RegOpenKeyW(key2, container, &key3))
+                         {
++                            DWORD cValues = 0;
+                             TRACE("Deleting instance id from device containers: %s, %ls\n", debugstr_w(device->instanceId), container);
+                             RegDeleteValueW(key3, device->instanceId);
+-                            remove = RegEnumValueW(key3, 0, data, &data_size, NULL, NULL, NULL, NULL) == ERROR_NO_MORE_ITEMS;
++                            remove = !RegQueryInfoKeyW(key3, NULL, NULL, NULL, NULL, NULL, NULL, &cValues, NULL, NULL, NULL, NULL) && !cValues;
+                             RegCloseKey(key3);
+                             if (remove)
+                                 remove = !RegDeleteKeyW(key2, container);
+-- 
+2.52.0
+

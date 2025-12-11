@@ -1,7 +1,7 @@
 From 3faaac2b0a106e7a0aa8206806f3723ded2d4fe0 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
-Subject: [PATCH 06/10] setupapi: SetupDiGetDeviceRegistryProperty now returns
+Subject: [PATCH 06/14] setupapi: SetupDiGetDeviceRegistryProperty now returns
  all lower case for SPDRP_BASE_CONTAINERID.
 
 ---
