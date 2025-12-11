@@ -1,4 +1,4 @@
-From ab0ec63866e9149f8692f2ed71a8a4e46ba713ca Mon Sep 17 00:00:00 2001
+From 27e950bc802688f554012593ce51abd1f1cb0f2e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -6,14 +6,14 @@ Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
  audio endpoint directly.
 
 ---
- dlls/mmdevapi/devenum.c                 |   7 +-
- libs/faudio/src/FAudio.c                |  31 +++-
+ dlls/mmdevapi/devenum.c                 |   6 +-
+ libs/faudio/src/FAudio.c                |  30 +++-
  libs/faudio/src/FAudio_internal.h       |   2 +
  libs/faudio/src/FAudio_platform_win32.c | 183 +++++++++++++++---------
- 4 files changed, 150 insertions(+), 73 deletions(-)
+ 4 files changed, 148 insertions(+), 73 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 6df43ca93ee..b0268833f03 100644
+index 6df43ca93ee..0f7fbe6ca86 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -1520,9 +1520,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
@@ -26,19 +26,18 @@ index 6df43ca93ee..b0268833f03 100644
      return S_OK;
  }
  
-@@ -1852,6 +1849,10 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1852,6 +1849,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
 +    /* Delay create thread as much as possible. */
-+    /* mmdevenum create may get called in dllmain, let's hope this doesn't get called in dllmain. */
 +    create_update_thread();
 +
      return S_OK;
  }
  
 diff --git a/libs/faudio/src/FAudio.c b/libs/faudio/src/FAudio.c
-index a011e89d89f..f19ef09b60f 100644
+index a011e89d89f..e2e39d077d3 100644
 --- a/libs/faudio/src/FAudio.c
 +++ b/libs/faudio/src/FAudio.c
 @@ -130,6 +130,8 @@ uint32_t FAudioCOMConstructWithCustomAllocatorEXT(
@@ -59,12 +58,11 @@ index a011e89d89f..f19ef09b60f 100644
  		LOG_MUTEX_DESTROY(audio, audio->sourceLock)
  		FAudio_PlatformDestroyMutex(audio->sourceLock);
  		LOG_MUTEX_DESTROY(audio, audio->submixLock)
-@@ -586,6 +590,15 @@ uint32_t FAudio_CreateSourceVoice(
+@@ -586,6 +590,14 @@ uint32_t FAudio_CreateSourceVoice(
  		audio->pMalloc
  	);
  
 +	/* Delay create thread as much as possible. */
-+	/* CreateMasteringVoice gets called in dllmain sometimes. */
 +	FAudio_PlatformLockMutex(audio->platformLock);
 +	LOG_MUTEX_LOCK(audio, audio->platformLock)
 +	if (audio->platform)
@@ -75,7 +73,7 @@ index a011e89d89f..f19ef09b60f 100644
  #ifdef FAUDIO_DUMP_VOICES
  	FAudio_DUMPVOICE_Init(*ppSourceVoice);
  #endif /* FAUDIO_DUMP_VOICES */
-@@ -768,6 +781,9 @@ static uint32_t CreateMasteringVoiceImpl(
+@@ -768,6 +780,9 @@ static uint32_t CreateMasteringVoiceImpl(
  		&DATAFORMAT_SUBTYPE_IEEE_FLOAT
  	);
  
@@ -85,7 +83,7 @@ index a011e89d89f..f19ef09b60f 100644
  	/* Platform Device */
  	FAudio_PlatformInit(
  		audio,
-@@ -781,7 +797,10 @@ static uint32_t CreateMasteringVoiceImpl(
+@@ -781,7 +796,10 @@ static uint32_t CreateMasteringVoiceImpl(
  	if (audio->platform == NULL)
  	{
  		FAudioVoice_DestroyVoice(*ppMasteringVoice);
@@ -97,7 +95,7 @@ index a011e89d89f..f19ef09b60f 100644
  
  		/* Not the best code, but it's probably true? */
  		return FAUDIO_E_DEVICE_INVALIDATED;
-@@ -799,6 +818,12 @@ static uint32_t CreateMasteringVoiceImpl(
+@@ -799,6 +817,12 @@ static uint32_t CreateMasteringVoiceImpl(
  		);
  	}
  
@@ -110,7 +108,7 @@ index a011e89d89f..f19ef09b60f 100644
  	return 0;
  }
  
-@@ -2420,11 +2445,15 @@ static void destroy_voice(FAudioVoice *voice)
+@@ -2420,11 +2444,15 @@ static void destroy_voice(FAudioVoice *voice)
  	}
  	else if (voice->type == FAUDIO_VOICE_MASTER)
  	{
