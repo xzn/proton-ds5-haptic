@@ -1,4 +1,4 @@
-From 776d09f5c927c5da0b60714e5e2a17ee0f0faf97 Mon Sep 17 00:00:00 2001
+From 4849a99897902dd917067dae3d0153b37577abe7 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -7,10 +7,10 @@ Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
 
 ---
  dlls/mmdevapi/devenum.c                 |   7 +-
- libs/faudio/src/FAudio.c                |   8 ++
- libs/faudio/src/FAudio_internal.h       |   1 +
- libs/faudio/src/FAudio_platform_win32.c | 180 +++++++++++++++---------
- 4 files changed, 124 insertions(+), 72 deletions(-)
+ libs/faudio/src/FAudio.c                |  31 +++-
+ libs/faudio/src/FAudio_internal.h       |   2 +
+ libs/faudio/src/FAudio_platform_win32.c | 183 +++++++++++++++---------
+ 4 files changed, 150 insertions(+), 73 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
 index 4adab5a95a2..342f8bf14de 100644
@@ -38,36 +38,107 @@ index 4adab5a95a2..342f8bf14de 100644
  }
  
 diff --git a/libs/faudio/src/FAudio.c b/libs/faudio/src/FAudio.c
-index a011e89d89f..68a7f2cd329 100644
+index a011e89d89f..f19ef09b60f 100644
 --- a/libs/faudio/src/FAudio.c
 +++ b/libs/faudio/src/FAudio.c
-@@ -586,6 +586,11 @@ uint32_t FAudio_CreateSourceVoice(
+@@ -130,6 +130,8 @@ uint32_t FAudioCOMConstructWithCustomAllocatorEXT(
+ #ifndef FAUDIO_DISABLE_DEBUGCONFIGURATION
+ 	FAudio_SetDebugConfiguration(*ppFAudio, &debugInit, NULL);
+ #endif /* FAUDIO_DISABLE_DEBUGCONFIGURATION */
++	(*ppFAudio)->platformLock = FAudio_PlatformCreateMutex();
++	LOG_MUTEX_CREATE((*ppFAudio), (*ppFAudio)->platformLock)
+ 	(*ppFAudio)->sourceLock = FAudio_PlatformCreateMutex();
+ 	LOG_MUTEX_CREATE((*ppFAudio), (*ppFAudio)->sourceLock)
+ 	(*ppFAudio)->submixLock = FAudio_PlatformCreateMutex();
+@@ -182,6 +184,8 @@ uint32_t FAudio_Release(FAudio *audio)
+ 		audio->pFree(audio->decodeCache);
+ 		audio->pFree(audio->resampleCache);
+ 		audio->pFree(audio->effectChainCache);
++		LOG_MUTEX_DESTROY(audio, audio->platformLock)
++		FAudio_PlatformDestroyMutex(audio->platformLock);
+ 		LOG_MUTEX_DESTROY(audio, audio->sourceLock)
+ 		FAudio_PlatformDestroyMutex(audio->sourceLock);
+ 		LOG_MUTEX_DESTROY(audio, audio->submixLock)
+@@ -586,6 +590,15 @@ uint32_t FAudio_CreateSourceVoice(
  		audio->pMalloc
  	);
  
 +	/* Delay create thread as much as possible. */
 +	/* CreateMasteringVoice gets called in dllmain sometimes. */
++	FAudio_PlatformLockMutex(audio->platformLock);
++	LOG_MUTEX_LOCK(audio, audio->platformLock)
 +	if (audio->platform)
 +		FAudio_PlatformCreateAudioThread(audio->platform);
++	FAudio_PlatformUnlockMutex(audio->platformLock);
++	LOG_MUTEX_UNLOCK(audio, audio->platformLock)
 +
  #ifdef FAUDIO_DUMP_VOICES
  	FAudio_DUMPVOICE_Init(*ppSourceVoice);
  #endif /* FAUDIO_DUMP_VOICES */
-@@ -799,6 +804,9 @@ static uint32_t CreateMasteringVoiceImpl(
+@@ -768,6 +781,9 @@ static uint32_t CreateMasteringVoiceImpl(
+ 		&DATAFORMAT_SUBTYPE_IEEE_FLOAT
+ 	);
+ 
++	FAudio_PlatformLockMutex(audio->platformLock);
++	LOG_MUTEX_LOCK(audio, audio->platformLock)
++
+ 	/* Platform Device */
+ 	FAudio_PlatformInit(
+ 		audio,
+@@ -781,7 +797,10 @@ static uint32_t CreateMasteringVoiceImpl(
+ 	if (audio->platform == NULL)
+ 	{
+ 		FAudioVoice_DestroyVoice(*ppMasteringVoice);
+-		audio->master = *ppMasteringVoice = NULL;
++		*ppMasteringVoice = NULL;
++
++		FAudio_PlatformUnlockMutex(audio->platformLock);
++		LOG_MUTEX_UNLOCK(audio, audio->platformLock)
+ 
+ 		/* Not the best code, but it's probably true? */
+ 		return FAUDIO_E_DEVICE_INVALIDATED;
+@@ -799,6 +818,12 @@ static uint32_t CreateMasteringVoiceImpl(
  		);
  	}
  
 +	if (audio->sources)
 +		FAudio_PlatformCreateAudioThread(audio->platform);
 +
++	FAudio_PlatformUnlockMutex(audio->platformLock);
++	LOG_MUTEX_UNLOCK(audio, audio->platformLock)
++
  	return 0;
  }
  
+@@ -2420,11 +2445,15 @@ static void destroy_voice(FAudioVoice *voice)
+ 	}
+ 	else if (voice->type == FAUDIO_VOICE_MASTER)
+ 	{
++		FAudio_PlatformLockMutex(voice->audio->platformLock);
++		LOG_MUTEX_LOCK(voice->audio, voice->audio->platformLock)
+ 		if (voice->audio->platform != NULL)
+ 		{
+ 			FAudio_PlatformQuit(voice->audio->platform);
+ 			voice->audio->platform = NULL;
+ 		}
++		FAudio_PlatformUnlockMutex(voice->audio->platformLock);
++		LOG_MUTEX_UNLOCK(voice->audio, voice->audio->platformLock)
+ 		if (voice->master.effectCache != NULL)
+ 		{
+ 			voice->audio->pFree(voice->master.effectCache);
 diff --git a/libs/faudio/src/FAudio_internal.h b/libs/faudio/src/FAudio_internal.h
-index ec8301e1025..862f4bdb04f 100644
+index ec8301e1025..994a37c8fa9 100644
 --- a/libs/faudio/src/FAudio_internal.h
 +++ b/libs/faudio/src/FAudio_internal.h
-@@ -801,6 +801,7 @@ void FAudio_PlatformInit(
+@@ -462,6 +462,7 @@ struct FAudio
+ 
+ 	/* Platform opaque pointer */
+ 	void *platform;
++	FAudioMutex platformLock;
+ };
+ 
+ struct FAudioVoice
+@@ -801,6 +802,7 @@ void FAudio_PlatformInit(
  	uint32_t *updateSize,
  	void** platformDevice
  );
@@ -76,7 +147,7 @@ index ec8301e1025..862f4bdb04f 100644
  
  uint32_t FAudio_PlatformGetDeviceCount(void);
 diff --git a/libs/faudio/src/FAudio_platform_win32.c b/libs/faudio/src/FAudio_platform_win32.c
-index 3168cbfc50a..c3c7f037d72 100644
+index 3168cbfc50a..5c7fcdb661d 100644
 --- a/libs/faudio/src/FAudio_platform_win32.c
 +++ b/libs/faudio/src/FAudio_platform_win32.c
 @@ -50,13 +50,6 @@ static CRITICAL_SECTION faudio_cs = { NULL, -1, 0, 0, 0, 0 };
@@ -142,7 +213,15 @@ index 3168cbfc50a..c3c7f037d72 100644
  	if (!my_SetThreadDescription)
  		return;
  
-@@ -353,6 +367,16 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+@@ -210,6 +224,7 @@ static DWORD WINAPI FAudio_AudioClientThread(void *user)
+ fail_release:
+ 	IAudioRenderClient_Release(render_client);
+ fail_free:
++	CloseHandle(args->events[0]);
+ 	FAudio_free(args);
+ 	return 0;
+ }
+@@ -353,6 +368,16 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
  		);
  	}
  
@@ -159,7 +238,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  	hr = IMMDeviceEnumerator_EnumAudioEndpoints(
  		device_enumerator,
  		eRender,
-@@ -372,10 +396,7 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+@@ -372,10 +397,7 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
  		return hr;
  	}
  
@@ -171,7 +250,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  		/* Open the device at index 0 instead of the "correct" one. */
  		actualIndex = 0;
  	} else {
-@@ -395,6 +416,70 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
+@@ -395,6 +417,70 @@ static HRESULT FAudio_OpenDevice(uint32_t deviceIndex, const uint16_t *deviceId,
  	return hr;
  }
  
@@ -242,7 +321,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  void FAudio_PlatformInit(
  	FAudio *audio,
  	uint32_t flags,
-@@ -406,11 +491,9 @@ void FAudio_PlatformInit(
+@@ -406,11 +492,9 @@ void FAudio_PlatformInit(
  ) {
  	struct FAudioAudioClientThreadArgs *args;
  	struct FAudioWin32PlatformData *data;
@@ -254,7 +333,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  	BOOL has_sse2 = IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE);
  #if defined(__aarch64__) || defined(_M_ARM64) || defined(__arm64ec__) || defined(_M_ARM64EC)
  	BOOL has_neon = TRUE;
-@@ -420,7 +503,6 @@ void FAudio_PlatformInit(
+@@ -420,7 +504,6 @@ void FAudio_PlatformInit(
  	BOOL has_neon = FALSE;
  #endif
  	FAudio_INTERNAL_InitSIMDFunctions(has_sse2, has_neon);
@@ -262,7 +341,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  
  	FAudio_PlatformAddRef();
  
-@@ -456,20 +538,10 @@ void FAudio_PlatformInit(
+@@ -456,20 +539,10 @@ void FAudio_PlatformInit(
  		);
  	}
  
@@ -284,7 +363,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  
  	hr = IMMDevice_Activate(
  		device,
-@@ -483,8 +555,8 @@ void FAudio_PlatformInit(
+@@ -483,8 +556,8 @@ void FAudio_PlatformInit(
  		goto fail_device;
  	IMMDevice_Release(device);
  
@@ -295,7 +374,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  
  	hr = IAudioClient_IsFormatSupported(
  		data->client,
-@@ -503,24 +575,6 @@ void FAudio_PlatformInit(
+@@ -503,24 +576,6 @@ void FAudio_PlatformInit(
  		CoTaskMemFree(closest);
  	}
  
@@ -320,7 +399,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  	mixFormat->Format.wFormatTag = args->format.Format.wFormatTag;
  	mixFormat->Format.nChannels = args->format.Format.nChannels;
  	mixFormat->Format.nSamplesPerSec = args->format.Format.nSamplesPerSec;
-@@ -544,18 +598,13 @@ void FAudio_PlatformInit(
+@@ -544,18 +599,13 @@ void FAudio_PlatformInit(
  		mixFormat->Format.cbSize = sizeof(FAudioWaveFormatEx);
  	}
  
@@ -343,7 +422,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  	*updateSize = args->updateSize;
  	*platformDevice = data;
  	return;
-@@ -564,10 +613,6 @@ fail_audio:
+@@ -564,10 +614,6 @@ fail_audio:
  	IAudioClient_Release(data->client);
  fail_device:
  	IMMDevice_Release(device);
@@ -354,7 +433,7 @@ index 3168cbfc50a..c3c7f037d72 100644
  fail_free_data:
  	FAudio_free(data);
  fail_free_args:
-@@ -581,8 +626,14 @@ void FAudio_PlatformQuit(void* platformDevice)
+@@ -581,9 +627,17 @@ void FAudio_PlatformQuit(void* platformDevice)
  {
  	struct FAudioWin32PlatformData *data = platformDevice;
  
@@ -368,10 +447,13 @@ index 3168cbfc50a..c3c7f037d72 100644
 +	}
 +	LeaveCriticalSection(&data->threadCs);
 +	DeleteCriticalSection(&data->threadCs);
++	CloseHandle(data->stopEvent);
  	if (data->client) IAudioClient_Release(data->client);
++	FAudio_free(data);
  	if (kernelbase)
  	{
-@@ -712,15 +763,6 @@ uint32_t FAudio_PlatformGetDeviceDetails(
+ 		my_SetThreadDescription = NULL;
+@@ -712,15 +766,6 @@ uint32_t FAudio_PlatformGetDeviceDetails(
  		IMMDevice_Release(device);
  		device = NULL;
  	}
