@@ -1,9 +1,8 @@
-From ffbcb68fa7327f2ff805dc429da474920cabcc30 Mon Sep 17 00:00:00 2001
+From 3a1837fedbb12a3eec3e77c21f172077d10d8cf9 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Thu, 11 Dec 2025 01:36:08 -0400
 Subject: [PATCH 14/14] setupapi: Switch to RegQueryInfoKeyW from
- RegEnumValueW, which seemed to cause ntdll.dll loader to have corrupt
- entries.
+ RegEnumValueW, avoid passing in the wrong value which led to buffer overrun.
 
 ---
  dlls/setupapi/devinst.c | 3 ++-
