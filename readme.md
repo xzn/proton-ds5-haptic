@@ -49,5 +49,5 @@ Change log:
 
 Fixed known issues (hopefully):
 
-- faudio/xaudio2 will crash if the audio device currently in use is disconnected. Working on a fix.
-- Sometimes after upgrading a prefix, you may encounter access violation error in winepulse.drv, it shouldn't happen in a fresh prefix. (Let me know if it does.)
+- ~~faudio/xaudio2 will crash if the audio device currently in use is disconnected. Working on a fix.~~
+- ~~Sometimes after upgrading a prefix, you may encounter access violation error in winepulse.drv, it shouldn't happen in a fresh prefix. (Let me know if it does.)~~
