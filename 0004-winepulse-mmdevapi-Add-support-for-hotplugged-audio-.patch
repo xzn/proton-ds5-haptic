@@ -1,20 +1,20 @@
-From 48191ba87579fe86b80e58aaf09bea38b854d473 Mon Sep 17 00:00:00 2001
+From e5e1d7860ff85409c527e16a6d053ea6c45fe6a5 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/9] winepulse/mmdevapi: Add support for hotplugged audio
  devices to be updated in the device list.
 
 ---
- dlls/mmdevapi/devenum.c          | 186 ++++++-
+ dlls/mmdevapi/devenum.c          | 188 +++++-
  dlls/mmdevapi/main.c             |   1 +
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
- dlls/winepulse.drv/pulse.c       | 926 ++++++++++++++++++++++---------
- 6 files changed, 872 insertions(+), 271 deletions(-)
+ dlls/winepulse.drv/pulse.c       | 949 +++++++++++++++++++++++--------
+ 6 files changed, 897 insertions(+), 271 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 0a84389dc26..9b275c95a64 100644
+index 0a84389dc26..1e7b8a19cd7 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -97,7 +97,7 @@ index 0a84389dc26..9b275c95a64 100644
          key_render = key_capture = NULL;
          WARN("Couldn't create key: %lu\n", ret);
          return E_FAIL;
-@@ -866,34 +886,151 @@ static HRESULT set_format(MMDevice *dev)
+@@ -866,34 +886,153 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -147,7 +147,6 @@ index 0a84389dc26..9b275c95a64 100644
 +
 +        if (FAILED(params.result))
 +            goto end;
-+        add_endpoints_from_params(&params);
 +
 +        /* FIXME: update default device when removed, though currently only core audio backend could potentially */
 +        /* change the default device, and it doesn't have hotplug implemented. */
@@ -181,6 +180,9 @@ index 0a84389dc26..9b275c95a64 100644
 +            }
 +            LeaveCriticalSection(&device_list_cs);
 +        }
++
++        /* add devices only after removing devices */
++        add_endpoints_from_params(&params);
 +
 +        params.flow = params.flow == eRender ? eCapture : eRender;
 +    }
@@ -261,7 +263,7 @@ index 0a84389dc26..9b275c95a64 100644
  
  end:
      free(params.endpoints);
-@@ -1069,7 +1206,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1069,7 +1208,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
@@ -270,7 +272,7 @@ index 0a84389dc26..9b275c95a64 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1159,6 +1296,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1159,6 +1298,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -278,7 +280,7 @@ index 0a84389dc26..9b275c95a64 100644
      LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
      {
          if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1168,8 +1306,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1168,8 +1308,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      if (This->devices_count)
      {
          This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
@@ -290,7 +292,7 @@ index 0a84389dc26..9b275c95a64 100644
  
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
-@@ -1181,6 +1321,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1181,6 +1323,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
              }
          }
      }
@@ -298,7 +300,7 @@ index 0a84389dc26..9b275c95a64 100644
  
      return S_OK;
  }
-@@ -1280,8 +1421,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
+@@ -1280,8 +1423,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
      MMDevice *device, *next;
@@ -310,7 +312,7 @@ index 0a84389dc26..9b275c95a64 100644
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
      key_render = key_capture = NULL;
-@@ -1302,6 +1446,9 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1302,6 +1448,9 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -320,7 +322,7 @@ index 0a84389dc26..9b275c95a64 100644
      return S_OK;
  }
  
-@@ -1407,10 +1554,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1407,10 +1556,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -333,7 +335,7 @@ index 0a84389dc26..9b275c95a64 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1434,6 +1583,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1434,6 +1585,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          return S_OK;
      }
  
@@ -341,7 +343,7 @@ index 0a84389dc26..9b275c95a64 100644
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1448,6 +1598,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1448,6 +1600,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -349,7 +351,7 @@ index 0a84389dc26..9b275c95a64 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1455,6 +1606,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1455,6 +1608,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -357,7 +359,7 @@ index 0a84389dc26..9b275c95a64 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1467,7 +1619,6 @@ struct NotificationClientWrapper {
+@@ -1467,7 +1621,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
@@ -365,7 +367,7 @@ index 0a84389dc26..9b275c95a64 100644
  static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
  {
      0, 0, &g_notif_lock,
-@@ -1828,6 +1979,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
+@@ -1828,6 +1981,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
          if (!pv->pwszVal)
              return E_OUTOFMEMORY;
          StringFromGUID2(&This->parent->devguid, pv->pwszVal, 39);
@@ -481,7 +483,7 @@ index 0617c5977c9..8d913cd6af1 100644
              return TRUE;
          }
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 85062ead684..1c92995d044 100644
+index 85062ead684..9ce30f3375d 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
 @@ -124,6 +124,19 @@ typedef struct _PhysDevice {
@@ -710,14 +712,14 @@ index 85062ead684..1c92995d044 100644
 -    unsigned int offset;
      PhysDevice *dev;
 +    size_t len, name_len;
-+
+ 
+-    params->num = list_count(list);
+-    offset = needed = params->num * sizeof(*params->endpoints);
 +    LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
 +        name_len = lstrlenW(dev->name) + 1;
 +        len = strlen(dev->pulse_name) + 1;
 +        *needed += name_len * sizeof(WCHAR) + ((len + 1) & ~1);
- 
--    params->num = list_count(list);
--    offset = needed = params->num * sizeof(*params->endpoints);
++
 +        if (*needed > size)
 +            return FALSE;
 +    }
@@ -1041,7 +1043,7 @@ index 85062ead684..1c92995d044 100644
  /* For most hardware on Windows, users must choose a configuration with an even
   * number of channels (stereo, quad, 5.1, 7.1). Users can then disable
   * channels, but those channels are still reported to applications from
-@@ -814,80 +953,367 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
+@@ -814,80 +953,390 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
      fmt->dwChannelMask = pa_mask;
  }
  
@@ -1274,21 +1276,45 @@ index 85062ead684..1c92995d044 100644
 +            pthread_cond_broadcast(&g_phys_cond);
 +            g_phys_unlock();
 +            return;
-+        }
-+    }
+         }
+     }
 +    LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, list_added, PhysDevice, entry) {
 +        if (dev->index == index) {
 +            list_remove(&dev->entry);
 +            list_add_tail(&g_phys_added_removed, &dev->entry);
 +            g_phys_unlock();
 +            return;
-         }
-     }
++        }
++    }
 +    g_phys_unlock();
 +}
  
 -    if (stream)
 -        pa_stream_unref(stream);
++static void pulse_remove_all_devices(EDataFlow flow)
++{
++    struct list *list = flow == eRender ? &g_phys_speakers : &g_phys_sources;
++    struct list *list_added = flow == eRender ? &g_phys_speakers_added : &g_phys_sources_added;
++    struct list *list_removed = flow == eRender ? &g_phys_speakers_removed : &g_phys_sources_removed;
++    PhysDevice *dev, *dev_next;
+ 
+-    if (length)
+-        *def_period = *min_period = pa_bytes_to_usec(10 * length, &ss);
++    g_phys_lock();
++    LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, list, PhysDevice, entry) {
++        list_remove(&dev->entry);
++        list_add_tail(list_removed, &dev->entry);
++    }
++    LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, list_added, PhysDevice, entry) {
++        list_remove(&dev->entry);
++        list_add_tail(&g_phys_added_removed, &dev->entry);
++    }
++    pthread_cond_broadcast(&g_phys_cond);
++    g_phys_unlock();
++}
+ 
+-    wfx->wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+-    wfx->cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
 +static void pulse_subscribecallback(pa_context *c, pa_subscription_event_type_t t, uint32_t index, void *userdata)
 +{
 +    pa_operation *o;
@@ -1303,8 +1329,7 @@ index 85062ead684..1c92995d044 100644
 +            }
 +            break;
  
--    if (length)
--        *def_period = *min_period = pa_bytes_to_usec(10 * length, &ss);
+-    convert_channel_map(&map, fmt);
 +        case PA_SUBSCRIPTION_EVENT_SOURCE:
 +            if ((t & PA_SUBSCRIPTION_EVENT_TYPE_MASK) == PA_SUBSCRIPTION_EVENT_NEW) {
 +                o = pa_context_get_source_info_by_index(c, index, pulse_phys_sources_cb, userdata);
@@ -1318,25 +1343,6 @@ index 85062ead684..1c92995d044 100644
 +    pulse_broadcast();
 +}
  
--    wfx->wFormatTag = WAVE_FORMAT_EXTENSIBLE;
--    wfx->cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
-+static void pulse_contextcallback(pa_context *c, void *userdata)
-+{
-+    pa_operation *o;
-+    switch (pa_context_get_state(c)) {
-+        default:
-+            FIXME("Unhandled state: %i\n", pa_context_get_state(c));
-+            return;
- 
--    convert_channel_map(&map, fmt);
-+        case PA_CONTEXT_CONNECTING:
-+        case PA_CONTEXT_UNCONNECTED:
-+        case PA_CONTEXT_AUTHORIZING:
-+        case PA_CONTEXT_SETTING_NAME:
-+        case PA_CONTEXT_TERMINATED:
-+            TRACE("State change to %i\n", pa_context_get_state(c));
-+            return;
- 
 -    wfx->wBitsPerSample = 8 * pa_sample_size_of_format(ss.format);
 -    wfx->nSamplesPerSec = ss.rate;
 -    wfx->nBlockAlign = wfx->nChannels * wfx->wBitsPerSample / 8;
@@ -1349,9 +1355,28 @@ index 85062ead684..1c92995d044 100644
 -        fmt->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 -    else
 -        fmt->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
++static void pulse_contextcallback(pa_context *c, void *userdata)
++{
++    pa_operation *o;
++    switch (pa_context_get_state(c)) {
++        default:
++            FIXME("Unhandled state: %i\n", pa_context_get_state(c));
++            return;
++
++        case PA_CONTEXT_CONNECTING:
++        case PA_CONTEXT_UNCONNECTED:
++        case PA_CONTEXT_AUTHORIZING:
++        case PA_CONTEXT_SETTING_NAME:
++        case PA_CONTEXT_TERMINATED:
++            TRACE("State change to %i\n", pa_context_get_state(c));
++            return;
++
 +        case PA_CONTEXT_READY:
 +            TRACE("Ready\n");
-+            free_phys_device_lists();
++
++            pulse_remove_all_devices(eRender);
++            pulse_remove_all_devices(eCapture);
++
 +            /* Burnout Paradise Remastered expects device name to have a space. */
 +            pulse_add_device(eRender, NULL, 0, Speakers, 0, "", "PulseAudio Output");
 +            pulse_add_device(eCapture, NULL, 0, Microphone, 0, "", "PulseAudio Input");
@@ -1457,7 +1482,7 @@ index 85062ead684..1c92995d044 100644
  }
  
  /* some poorly-behaved applications call audio functions during DllMain, so we
-@@ -897,35 +1323,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
+@@ -897,35 +1346,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
  static NTSTATUS pulse_test_connect(void *args)
  {
      struct test_connect_params *params = args;
@@ -1516,7 +1541,7 @@ index 85062ead684..1c92995d044 100644
      /* Wait for connection */
      while (pa_mainloop_iterate(pulse_ml, 1, &ret) >= 0) {
          pa_context_state_t state = pa_context_get_state(pulse_ctx);
-@@ -944,53 +1377,24 @@ static NTSTATUS pulse_test_connect(void *args)
+@@ -944,53 +1400,24 @@ static NTSTATUS pulse_test_connect(void *args)
          pa_context_get_server(pulse_ctx),
          pa_context_get_server_protocol_version(pulse_ctx));
  
@@ -1579,7 +1604,7 @@ index 85062ead684..1c92995d044 100644
      pulse_unlock();
      params->priority = Priority_Unavailable;
      return STATUS_SUCCESS;
-@@ -1214,6 +1618,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1214,6 +1641,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
          return E_POINTER;
      }
  
@@ -1587,7 +1612,7 @@ index 85062ead684..1c92995d044 100644
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
          if (strcmp(pulse_name, dev->pulse_name))
              continue;
-@@ -1222,8 +1627,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1222,8 +1650,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
              *def = dev->def_period;
          if (min)
              *min = dev->min_period;
@@ -1599,7 +1624,7 @@ index 85062ead684..1c92995d044 100644
  
      return E_FAIL;
  }
-@@ -2410,15 +2818,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
+@@ -2410,15 +2841,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1618,7 +1643,7 @@ index 85062ead684..1c92995d044 100644
  
      params->result = E_FAIL;
      return STATUS_SUCCESS;
-@@ -2720,17 +3130,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2720,17 +3153,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1641,7 +1666,7 @@ index 85062ead684..1c92995d044 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              case 3:   /* PhysicalSpeakers */
-@@ -2738,6 +3153,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2738,6 +3176,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
                      goto fail;
                  params->value->vt = VT_UI4;
                  params->value->ulVal = dev->channel_mask;
@@ -1650,7 +1675,7 @@ index 85062ead684..1c92995d044 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              }
-@@ -2752,14 +3169,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2752,14 +3192,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
                  params->result = S_OK;
              }
  

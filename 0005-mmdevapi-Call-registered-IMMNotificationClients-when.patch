@@ -1,4 +1,4 @@
-From 15250bb22ca3c130e813768a886db547faa2d9f5 Mon Sep 17 00:00:00 2001
+From 4d560b6e00775bae7bf940ff215e9d90d9fd4b6c Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
 Subject: [PATCH 5/9] mmdevapi: Call registered IMMNotificationClients when
@@ -9,7 +9,7 @@ Subject: [PATCH 5/9] mmdevapi: Call registered IMMNotificationClients when
  1 file changed, 132 insertions(+), 76 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 9b275c95a64..4adab5a95a2 100644
+index 1e7b8a19cd7..6df43ca93ee 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -89,8 +89,24 @@ static CRITICAL_SECTION_DEBUG device_list_cs_debug =
@@ -256,7 +256,7 @@ index 9b275c95a64..4adab5a95a2 100644
      }
  }
  
-@@ -949,6 +1007,10 @@ static DWORD WINAPI update_thread_proc(void *user)
+@@ -948,6 +1006,10 @@ static DWORD WINAPI update_thread_proc(void *user)
                  if (dev->flow != params.flow)
                      continue;
                  if (IsEqualGUID(&dev->devguid, &guid)) {
@@ -267,7 +267,7 @@ index 9b275c95a64..4adab5a95a2 100644
                      dev->state = DEVICE_STATE_NOTPRESENT;
                      StringFromGUID2(&dev->devguid, guidstr, ARRAY_SIZE(guidstr));
                      if (dev->flow == eRender)
-@@ -960,6 +1022,16 @@ static DWORD WINAPI update_thread_proc(void *user)
+@@ -959,6 +1021,16 @@ static DWORD WINAPI update_thread_proc(void *user)
                          RegSetValueExW(key, L"DeviceState", 0, REG_DWORD, (const BYTE*)&dev->state, sizeof(DWORD));
                          RegCloseKey(key);
                      }
@@ -284,7 +284,7 @@ index 9b275c95a64..4adab5a95a2 100644
                      break;
                  }
              }
-@@ -1206,7 +1278,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1208,7 +1280,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
@@ -293,7 +293,7 @@ index 9b275c95a64..4adab5a95a2 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1611,22 +1683,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1613,22 +1685,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
      return E_INVALIDARG;
  }
  

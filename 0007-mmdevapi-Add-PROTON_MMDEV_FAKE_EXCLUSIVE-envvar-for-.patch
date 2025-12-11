@@ -1,4 +1,4 @@
-From d2bc5b01ef6f163476efc4b508804c38dbbaae21 Mon Sep 17 00:00:00 2001
+From 959889493999c8465c41a3de30a6ddfcd0020001 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
 Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
@@ -96,10 +96,10 @@ index 07390b16527..7fa3281003d 100644
  }
  
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 1c92995d044..56dbd262a28 100644
+index 9ce30f3375d..f820a5384a7 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
-@@ -2724,6 +2724,8 @@ static NTSTATUS pulse_is_format_supported(void *args)
+@@ -2747,6 +2747,8 @@ static NTSTATUS pulse_is_format_supported(void *args)
                                               AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED;
          else if (params->result == S_FALSE)
              params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;

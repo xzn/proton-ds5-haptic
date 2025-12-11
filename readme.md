@@ -30,6 +30,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-11 Potential logic error in hotplugged audio devices support
 - 2025-12-11 Rebased patches
 - 2025-12-10 Misc changes attempt to the same fix
 - 2025-12-10 Delay thread creation as an attempt to fix xaudio2_9.dll load crash.

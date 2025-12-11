@@ -1,4 +1,4 @@
-From 4849a99897902dd917067dae3d0153b37577abe7 Mon Sep 17 00:00:00 2001
+From fdf74f23dc18723ade623aff3873095ed1667eab Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -13,10 +13,10 @@ Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
  4 files changed, 150 insertions(+), 73 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 4adab5a95a2..342f8bf14de 100644
+index 6df43ca93ee..b0268833f03 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -1518,9 +1518,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1520,9 +1520,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -26,7 +26,7 @@ index 4adab5a95a2..342f8bf14de 100644
      return S_OK;
  }
  
-@@ -1850,6 +1847,10 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1852,6 +1849,10 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
