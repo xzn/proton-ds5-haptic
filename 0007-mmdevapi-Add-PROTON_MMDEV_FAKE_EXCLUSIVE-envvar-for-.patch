@@ -1,7 +1,7 @@
-From 9a82f52f3208fc37d7d16cae02f3b132f50e4e9a Mon Sep 17 00:00:00 2001
+From 49ba9cac3d606c66ecfafa1e88cb004675bf781a Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
-Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
+Subject: [PATCH 07/10] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
  faking exclusive audio device support.
 
 ---
