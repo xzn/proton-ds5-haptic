@@ -1,4 +1,4 @@
-From 7c8dfc7bcfe6f2befa29d816fa56f048ffd7c76a Mon Sep 17 00:00:00 2001
+From 776d09f5c927c5da0b60714e5e2a17ee0f0faf97 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -7,10 +7,10 @@ Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
 
 ---
  dlls/mmdevapi/devenum.c                 |   7 +-
- libs/faudio/src/FAudio.c                |   4 +
+ libs/faudio/src/FAudio.c                |   8 ++
  libs/faudio/src/FAudio_internal.h       |   1 +
  libs/faudio/src/FAudio_platform_win32.c | 180 +++++++++++++++---------
- 4 files changed, 120 insertions(+), 72 deletions(-)
+ 4 files changed, 124 insertions(+), 72 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
 index 4adab5a95a2..342f8bf14de 100644
@@ -38,20 +38,31 @@ index 4adab5a95a2..342f8bf14de 100644
  }
  
 diff --git a/libs/faudio/src/FAudio.c b/libs/faudio/src/FAudio.c
-index a011e89d89f..7a7bfdc2151 100644
+index a011e89d89f..68a7f2cd329 100644
 --- a/libs/faudio/src/FAudio.c
 +++ b/libs/faudio/src/FAudio.c
-@@ -586,6 +586,10 @@ uint32_t FAudio_CreateSourceVoice(
+@@ -586,6 +586,11 @@ uint32_t FAudio_CreateSourceVoice(
  		audio->pMalloc
  	);
  
 +	/* Delay create thread as much as possible. */
 +	/* CreateMasteringVoice gets called in dllmain sometimes. */
-+	FAudio_PlatformCreateAudioThread(audio->platform);
++	if (audio->platform)
++		FAudio_PlatformCreateAudioThread(audio->platform);
 +
  #ifdef FAUDIO_DUMP_VOICES
  	FAudio_DUMPVOICE_Init(*ppSourceVoice);
  #endif /* FAUDIO_DUMP_VOICES */
+@@ -799,6 +804,9 @@ static uint32_t CreateMasteringVoiceImpl(
+ 		);
+ 	}
+ 
++	if (audio->sources)
++		FAudio_PlatformCreateAudioThread(audio->platform);
++
+ 	return 0;
+ }
+ 
 diff --git a/libs/faudio/src/FAudio_internal.h b/libs/faudio/src/FAudio_internal.h
 index ec8301e1025..862f4bdb04f 100644
 --- a/libs/faudio/src/FAudio_internal.h
