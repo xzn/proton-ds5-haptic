@@ -1,4 +1,4 @@
-From 2f97ba4c900f4d0b8090d79f370f2f23be43a2e4 Mon Sep 17 00:00:00 2001
+From 658385726c88b8cfd63560fbd0ba58c5577fbfee Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -188,7 +188,7 @@ index ec8301e1025..90239044a6f 100644
  
  uint32_t FAudio_PlatformGetDeviceCount(void);
 diff --git a/libs/faudio/src/FAudio_platform_win32.c b/libs/faudio/src/FAudio_platform_win32.c
-index 3168cbfc50a..71bfc7d47d4 100644
+index 3168cbfc50a..0cfd329f180 100644
 --- a/libs/faudio/src/FAudio_platform_win32.c
 +++ b/libs/faudio/src/FAudio_platform_win32.c
 @@ -50,13 +50,6 @@ static CRITICAL_SECTION faudio_cs = { NULL, -1, 0, 0, 0, 0 };
@@ -373,7 +373,7 @@ index 3168cbfc50a..71bfc7d47d4 100644
 +fail_close_audio_evt:
 +	CloseHandle(audioEvent);
 +fail_args:
-+	free(data->args);
++	FAudio_free(data->args);
 +	data->args = NULL;
 +	LeaveCriticalSection(&data->threadCs);
 +	return;
