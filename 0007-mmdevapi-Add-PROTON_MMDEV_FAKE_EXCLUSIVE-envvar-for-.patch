@@ -1,4 +1,4 @@
-From 897e70886e76916cc5523740cef46458ae5407a2 Mon Sep 17 00:00:00 2001
+From b400a7b032902d3370b96e8361cb19d8549ff42a Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
 Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
@@ -10,7 +10,7 @@ Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for
  2 files changed, 33 insertions(+), 5 deletions(-)
 
 diff --git a/dlls/mmdevapi/client.c b/dlls/mmdevapi/client.c
-index 07390b16527..4f12315e27e 100644
+index 07390b16527..045204d23ab 100644
 --- a/dlls/mmdevapi/client.c
 +++ b/dlls/mmdevapi/client.c
 @@ -50,6 +50,20 @@ extern HRESULT get_audio_session(const GUID *sessionguid, IMMDevice *device, UIN
@@ -79,7 +79,7 @@ index 07390b16527..4f12315e27e 100644
      wine_unix_call(is_format_supported, &params);
  
 -    if (params.result == S_FALSE)
-+    if (out && params.result == S_FALSE)
++    if (out && params.result == S_FALSE && !fake_exclusive)
          *out = &params.fmt_out->Format;
      else
          CoTaskMemFree(params.fmt_out);
