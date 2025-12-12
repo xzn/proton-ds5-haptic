@@ -18,7 +18,7 @@ For DSDC crash when controller hotplug patched:
 
 - 0008-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
 
-Misc changes:
+For DSDC crash when PulseAudio server is disconnectd/restarted, and other misc changes:
 
 - 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-in-case-.patch
 
