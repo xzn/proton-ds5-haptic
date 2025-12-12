@@ -30,6 +30,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-12 Tries to fix crash when pulse server is disconnected
 - 2025-12-11 Potential logic error in hotplugged audio devices support
 - 2025-12-11 Rebased patches
 - 2025-12-10 Misc changes attempt to the same fix
