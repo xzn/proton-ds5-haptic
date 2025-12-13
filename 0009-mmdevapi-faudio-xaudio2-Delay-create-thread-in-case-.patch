@@ -1,4 +1,4 @@
-From 91f34ff73369123ed73027e88d7786df6cd49435 Mon Sep 17 00:00:00 2001
+From edbd5e1f2c5b41fd44ee56ee381614fa57fa989e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of

@@ -1,4 +1,4 @@
-From 4812d22a370e8bf8a116cb1115c5bb544927b70d Mon Sep 17 00:00:00 2001
+From 37e5f1f1cf1fc87a46fb0330837530bab4e69f2d Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 03:12:25 -0400
 Subject: [PATCH 7/9] mmdevapi: Add PROTON_MMDEV_FAKE_EXCLUSIVE envvar for

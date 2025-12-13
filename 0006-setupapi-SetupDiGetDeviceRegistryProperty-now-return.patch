@@ -1,4 +1,4 @@
-From 950cc9d750e6a978ffcc13f45cc53a3649b47be8 Mon Sep 17 00:00:00 2001
+From f0f41b2cd0f3682b64e3d867f7911ba3782ff558 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
 Subject: [PATCH 6/9] setupapi: SetupDiGetDeviceRegistryProperty now returns
@@ -10,10 +10,10 @@ Subject: [PATCH 6/9] setupapi: SetupDiGetDeviceRegistryProperty now returns
  1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index e74dccb353b..f99d80fdf02 100644
+index 7690a50506b..b1f55f80145 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -3696,7 +3696,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+@@ -3699,7 +3699,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
      if (Property < ARRAY_SIZE(PropertyMap) && PropertyMap[Property].nameA)
      {
          DWORD size = PropertyBufferSize;
@@ -31,7 +31,7 @@ index e74dccb353b..f99d80fdf02 100644
                  NULL, PropertyRegDataType, PropertyBuffer, &size);
  
          if (l == ERROR_FILE_NOT_FOUND)
-@@ -3710,6 +3719,7 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+@@ -3713,6 +3722,7 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
          if (RequiredSize)
              *RequiredSize = size;
      }
@@ -39,7 +39,7 @@ index e74dccb353b..f99d80fdf02 100644
      return ret;
  }
  
-@@ -3751,7 +3761,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+@@ -3754,7 +3764,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
              SetLastError(l);
          if (RequiredSize)
              *RequiredSize = size;
