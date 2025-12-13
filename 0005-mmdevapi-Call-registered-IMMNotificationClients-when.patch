@@ -1,4 +1,4 @@
-From 4d560b6e00775bae7bf940ff215e9d90d9fd4b6c Mon Sep 17 00:00:00 2001
+From 34d286e8d575cffb591521200488780eded43b8c Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
 Subject: [PATCH 5/9] mmdevapi: Call registered IMMNotificationClients when

@@ -1,38 +1,37 @@
-From 76c716cc8bdc0e1c5a747f4f4e8cc852bdb62427 Mon Sep 17 00:00:00 2001
+From 65a18f6b11de62fedcd767fe28c6d551004dce38 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
 Subject: [PATCH 2/9] setupapi: Set DeviceContainers registry values when
  container ids are set.
 
 ---
- dlls/setupapi/devinst.c | 106 ++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 106 insertions(+)
+ dlls/setupapi/devinst.c | 103 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 103 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 0c222d0c19d..09ba7db0841 100644
+index 0c222d0c19d..e74dccb353b 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -656,9 +656,112 @@ static const struct PropertyMapEntry PropertyMap[] = {
+@@ -656,9 +656,109 @@ static const struct PropertyMapEntry PropertyMap[] = {
  };
  #undef PROPERTY_MAP_ENTRY
  
-+static const WCHAR DeviceContainers[] = L"System\\CurrentControlSet\\Control\\DeviceContainers";
++#define DeviceContainers L"System\\CurrentControlSet\\Control\\DeviceContainers"
 +#define BaseContainers  L"BaseContainers"
 +#define GUID_STR_LEN 39
 +#define GUID_NULL_STR L"{00000000-0000-0000-0000-000000000000}"
++#define CONTAINER_PATH_LEN 143
 +
 +static void get_device_containers_path(LPWSTR path, DWORD path_len, LPCWSTR container_str)
 +{
-+    lstrcpynW(path, DeviceContainers, path_len);
-+    wcsncat(path, L"\\", path_len);
-+    wcsncat(path, container_str, path_len);
-+    wcsncat(path, L"\\" BaseContainers L"\\", path_len);
-+    wcsncat(path, container_str, path_len);
++    swprintf(path, path_len,
++        DeviceContainers L"\\%ls\\" BaseContainers L"\\%ls",
++        container_str, container_str);
 +}
 +
 +static void SETUPDI_UpdateDeviceContainersW(struct device *device, const BYTE *buffer, DWORD buffer_size)
 +{
-+    WCHAR path[MAX_PATH];
++    WCHAR path[CONTAINER_PATH_LEN];
 +    WCHAR container_str[GUID_STR_LEN];
 +    HKEY key;
 +    DWORD data_size = GUID_STR_LEN * sizeof(WCHAR);
@@ -41,8 +40,7 @@ index 0c222d0c19d..09ba7db0841 100644
 +    for(;;) {
 +        LONG ret;
 +
-+        if (data)
-+            free(data);
++        free(data);
 +        data = malloc(data_size);
 +        if (!data)
 +            break;
@@ -84,8 +82,7 @@ index 0c222d0c19d..09ba7db0841 100644
 +        }
 +        else if (ret != ERROR_MORE_DATA)
 +        {
-+            if (data)
-+                free(data);
++            free(data);
 +            break;
 +        }
 +    }
@@ -96,7 +93,7 @@ index 0c222d0c19d..09ba7db0841 100644
 +    if (!lstrcmpW(container_str, GUID_NULL_STR))
 +        return;
 +
-+    get_device_containers_path(path, MAX_PATH, container_str);
++    get_device_containers_path(path, ARRAY_SIZE(path), container_str);
 +    if (!RegCreateKeyW(HKEY_LOCAL_MACHINE, path, &key))
 +    {
 +        TRACE("device->instanceId: %s %ls\n", debugstr_w(device->instanceId), container_str);
@@ -125,7 +122,7 @@ index 0c222d0c19d..09ba7db0841 100644
      if (prop < ARRAY_SIZE(PropertyMap) && PropertyMap[prop].nameW)
      {
          LONG ret = RegSetValueExW(device->key, PropertyMap[prop].nameW, 0,
-@@ -3670,6 +3773,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
+@@ -3670,6 +3770,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
      if (!(device = get_device(devinfo, device_data)))
          return FALSE;
  
