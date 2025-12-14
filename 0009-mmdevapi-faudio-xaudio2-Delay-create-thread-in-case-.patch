@@ -1,4 +1,4 @@
-From edbd5e1f2c5b41fd44ee56ee381614fa57fa989e Mon Sep 17 00:00:00 2001
+From 8dc85dd57a13678c93896964cecb32605c880812 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
@@ -6,17 +6,27 @@ Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
  audio endpoint directly.
 
 ---
- dlls/mmdevapi/devenum.c                 |   6 +-
+ dlls/mmdevapi/devenum.c                 |   9 +-
  libs/faudio/src/FAudio.c                |  46 ++++-
  libs/faudio/src/FAudio_internal.h       |   4 +
  libs/faudio/src/FAudio_platform_win32.c | 217 ++++++++++++++++--------
- 4 files changed, 198 insertions(+), 75 deletions(-)
+ 4 files changed, 201 insertions(+), 75 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 6df43ca93ee..0f7fbe6ca86 100644
+index 6df43ca93ee..4949670fa6e 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -1520,9 +1520,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1397,6 +1397,9 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+     }
+     LeaveCriticalSection(&device_list_cs);
+ 
++    /* Delay create thread as much as possible. */
++    create_update_thread();
++
+     return S_OK;
+ }
+ 
+@@ -1520,9 +1523,6 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -26,7 +36,7 @@ index 6df43ca93ee..0f7fbe6ca86 100644
      return S_OK;
  }
  
-@@ -1852,6 +1849,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1852,6 +1852,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
