@@ -1,3 +1,9 @@
+#### Warning
+
+My code for audio devices hotplug support is kinda off, will likely break in weird ways if multiple programs using audio are running at the same time (when same wineserver and prefix). Looking at other possible solutions for now.
+
+---
+
 For haptic in Stellar Blade and Spider-Man Remastered/Miles Morales:
 
 - 0001-mmdevapi-setupapi-HACK-Set-MMDevices-properties-in-s.patch
