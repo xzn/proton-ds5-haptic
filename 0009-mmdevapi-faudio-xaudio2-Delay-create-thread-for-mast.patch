@@ -1,9 +1,9 @@
-From 8dc85dd57a13678c93896964cecb32605c880812 Mon Sep 17 00:00:00 2001
+From bef844d57c85205c8b46b3d75a9ad1e03801ad6f Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
-Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread in case of
- functions being called in dllmain; delay kernelbase resolve; get default
- audio endpoint directly.
+Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread for
+ mastering audio; delay kernelbase resolve; get default audio endpoint
+ directly.
 
 ---
  dlls/mmdevapi/devenum.c                 |   9 +-

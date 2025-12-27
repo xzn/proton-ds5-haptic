@@ -26,7 +26,7 @@ For DSDC crash when controller hotplug patched:
 
 For DSDC crash when PulseAudio server is disconnected/restarted, and other misc changes:
 
-- 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-in-case-.patch
+- 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-for-mast.patch
 
 Note:
 
@@ -36,6 +36,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-27 Fix possible hang on error path when initializing mmdevapi
 - 2025-12-13 Delete device ids from device containers when removing devices
 - 2025-12-12 Tries to fix crash when pulse server is disconnected
 - 2025-12-11 Potential logic error in hotplugged audio devices support
@@ -56,7 +57,6 @@ Change log:
 - 2025-12-03 Fix controllers speakers not playing in Spider-Man
 - 2025-12-02 Initial separated patch files
 
-Fixed known issues (hopefully):
+Known issues:
 
-- ~~faudio/xaudio2 will crash if the audio device currently in use is disconnected. Working on a fix.~~
-- ~~Sometimes after upgrading a prefix, you may encounter access violation error in winepulse.drv, it shouldn't happen in a fresh prefix. (Let me know if it does.)~~
+- When multiple processes using mmdevapi are running at once (under the same wineserver and same wineprefix), hotplugging support will not work as expected.

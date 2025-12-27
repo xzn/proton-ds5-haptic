@@ -1,4 +1,4 @@
-From 4498e3e1c399b1781724fb013dc1677b3fbd3a07 Mon Sep 17 00:00:00 2001
+From afced23b0ee4546e05f8ed9f95e09e2976f376ca Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 4/9] winepulse/mmdevapi: Add support for hotplugged audio
@@ -10,8 +10,8 @@ Subject: [PATCH 4/9] winepulse/mmdevapi: Add support for hotplugged audio
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
  dlls/winepulse.drv/mmdevdrv.c    |  20 +-
- dlls/winepulse.drv/pulse.c       | 949 +++++++++++++++++++++++--------
- 6 files changed, 897 insertions(+), 271 deletions(-)
+ dlls/winepulse.drv/pulse.c       | 950 +++++++++++++++++++++++--------
+ 6 files changed, 898 insertions(+), 271 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
 index 0a84389dc26..1e7b8a19cd7 100644
@@ -483,7 +483,7 @@ index 0617c5977c9..8d913cd6af1 100644
              return TRUE;
          }
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 85062ead684..9ce30f3375d 100644
+index 85062ead684..ffda1b8547b 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
 @@ -124,6 +124,19 @@ typedef struct _PhysDevice {
@@ -678,13 +678,14 @@ index 85062ead684..9ce30f3375d 100644
  }
  
  static NTSTATUS pulse_main_loop(void *args)
-@@ -314,78 +428,196 @@ static NTSTATUS pulse_main_loop(void *args)
+@@ -314,78 +428,197 @@ static NTSTATUS pulse_main_loop(void *args)
      struct main_loop_params *params = args;
      int ret;
      pulse_lock();
 -    pulse_ml = pa_mainloop_new();
 -    pa_mainloop_set_poll_func(pulse_ml, pulse_poll_func, NULL);
 +    if (!pulse_main_loop_new()) {
++        NtSetEvent(params->event, NULL);
 +        pulse_unlock();
 +        ERR("Failed to create main loop\n");
 +        return STATUS_SUCCESS;
@@ -923,7 +924,7 @@ index 85062ead684..9ce30f3375d 100644
  }
  
  static void pulse_stream_state(pa_stream *s, void *user)
-@@ -430,47 +662,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
+@@ -430,47 +663,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
      return pa_stream_get_state(stream->stream) == PA_STREAM_READY;
  }
  
@@ -971,7 +972,7 @@ index 85062ead684..9ce30f3375d 100644
  static UINT pulse_channel_map_to_channel_mask(const pa_channel_map *map)
  {
      int i;
-@@ -633,10 +824,10 @@ static GUID get_container_id(const char *sysfs_path)
+@@ -633,10 +825,10 @@ static GUID get_container_id(const char *sysfs_path)
      create_usb_dev_container_id(init_time, vid, pid, bus_num, dev_num, &tmp_guid);
  
  exit:
@@ -984,7 +985,7 @@ index 85062ead684..9ce30f3375d 100644
  
      TRACE("Returning %s.\n", debugstr_guid(&tmp_guid));
      return tmp_guid;
-@@ -679,58 +870,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
+@@ -679,58 +871,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
          dev->container_id = get_container_id(buffer);
  }
  
@@ -1043,7 +1044,7 @@ index 85062ead684..9ce30f3375d 100644
  /* For most hardware on Windows, users must choose a configuration with an even
   * number of channels (stereo, quad, 5.1, 7.1). Users can then disable
   * channels, but those channels are still reported to applications from
-@@ -814,80 +953,390 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
+@@ -814,80 +954,390 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
      fmt->dwChannelMask = pa_mask;
  }
  
@@ -1482,7 +1483,7 @@ index 85062ead684..9ce30f3375d 100644
  }
  
  /* some poorly-behaved applications call audio functions during DllMain, so we
-@@ -897,35 +1346,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
+@@ -897,35 +1347,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
  static NTSTATUS pulse_test_connect(void *args)
  {
      struct test_connect_params *params = args;
@@ -1541,7 +1542,7 @@ index 85062ead684..9ce30f3375d 100644
      /* Wait for connection */
      while (pa_mainloop_iterate(pulse_ml, 1, &ret) >= 0) {
          pa_context_state_t state = pa_context_get_state(pulse_ctx);
-@@ -944,53 +1400,24 @@ static NTSTATUS pulse_test_connect(void *args)
+@@ -944,53 +1401,24 @@ static NTSTATUS pulse_test_connect(void *args)
          pa_context_get_server(pulse_ctx),
          pa_context_get_server_protocol_version(pulse_ctx));
  
@@ -1604,7 +1605,7 @@ index 85062ead684..9ce30f3375d 100644
      pulse_unlock();
      params->priority = Priority_Unavailable;
      return STATUS_SUCCESS;
-@@ -1214,6 +1641,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1214,6 +1642,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
          return E_POINTER;
      }
  
@@ -1612,7 +1613,7 @@ index 85062ead684..9ce30f3375d 100644
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
          if (strcmp(pulse_name, dev->pulse_name))
              continue;
-@@ -1222,8 +1650,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1222,8 +1651,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
              *def = dev->def_period;
          if (min)
              *min = dev->min_period;
@@ -1624,7 +1625,7 @@ index 85062ead684..9ce30f3375d 100644
  
      return E_FAIL;
  }
-@@ -2410,15 +2841,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
+@@ -2410,15 +2842,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1643,7 +1644,7 @@ index 85062ead684..9ce30f3375d 100644
  
      params->result = E_FAIL;
      return STATUS_SUCCESS;
-@@ -2720,17 +3153,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2720,17 +3154,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1666,7 +1667,7 @@ index 85062ead684..9ce30f3375d 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              case 3:   /* PhysicalSpeakers */
-@@ -2738,6 +3176,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2738,6 +3177,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
                      goto fail;
                  params->value->vt = VT_UI4;
                  params->value->ulVal = dev->channel_mask;
@@ -1675,7 +1676,7 @@ index 85062ead684..9ce30f3375d 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              }
-@@ -2752,14 +3192,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2752,14 +3193,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
                  params->result = S_OK;
              }
  
