@@ -28,6 +28,10 @@ For DSDC crash when PulseAudio server is disconnected/restarted, and other misc 
 
 - 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-for-mast.patch
 
+For Helldivers 2 end of 2025 update:
+
+- 0010-hid-mmdevapi-full-name-for-DualSense-Wireless-Contro.patch
+
 Note:
 
 If you are patching on top of wine-staging, the following patch need to be excluded:
@@ -36,6 +40,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2025-12-29 Full name for DualSense Wireless Controller, fix Helldivers 2 haptic support
 - 2025-12-27 Fix possible hang on error path when initializing mmdevapi
 - 2025-12-13 Delete device ids from device containers when removing devices
 - 2025-12-12 Tries to fix crash when pulse server is disconnected

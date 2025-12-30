@@ -1,7 +1,7 @@
 From bef844d57c85205c8b46b3d75a9ad1e03801ad6f Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
-Subject: [PATCH 9/9] mmdevapi/faudio/xaudio2: Delay create thread for
+Subject: [PATCH 09/10] mmdevapi/faudio/xaudio2: Delay create thread for
  mastering audio; delay kernelbase resolve; get default audio endpoint
  directly.
 

@@ -1,0 +1,44 @@
+From 828e18734fe04f6487507ea0e13bedcc24bcbc6c Mon Sep 17 00:00:00 2001
+From: JS Deck <jsdeckerido@gmail.com>
+Date: Mon, 29 Dec 2025 23:20:56 -0400
+Subject: [PATCH 10/10] hid/mmdevapi: full name for DualSense Wireless
+ Controller
+
+---
+ dlls/hidclass.sys/device.c | 4 ++--
+ dlls/mmdevapi/devenum.c    | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/hidclass.sys/device.c b/dlls/hidclass.sys/device.c
+index 88e632e2881..b2d5a1c58d2 100644
+--- a/dlls/hidclass.sys/device.c
++++ b/dlls/hidclass.sys/device.c
+@@ -401,8 +401,8 @@ static const struct device_strings device_strings[] =
+     { .id = L"VID_054C&PID_05C4", .product = L"Wireless Controller" },
+     { .id = L"VID_054C&PID_09CC", .product = L"Wireless Controller" },
+     { .id = L"VID_054C&PID_0BA0", .product = L"Wireless Controller" },
+-    { .id = L"VID_054C&PID_0CE6", .product = L"Wireless Controller" },
+-    { .id = L"VID_054C&PID_0DF2", .product = L"Wireless Controller" },
++    { .id = L"VID_054C&PID_0CE6", .product = L"DualSense Wireless Controller" },
++    { .id = L"VID_054C&PID_0DF2", .product = L"DualSense Wireless Controller" },
+ };
+ 
+ static const WCHAR *find_device_string( const WCHAR *device_id, ULONG index )
+diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
+index 4949670fa6e..1ad726b3877 100644
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -540,8 +540,8 @@ struct product_name_overrides
+ static const struct product_name_overrides product_name_overrides[] =
+ {
+     /* Sony controllers */
+-    { .id = L"VID_054C&PID_0CE6", .product = L"Wireless Controller" },
+-    { .id = L"VID_054C&PID_0DF2", .product = L"Wireless Controller" },
++    { .id = L"VID_054C&PID_0CE6", .product = L"DualSense Wireless Controller" },
++    { .id = L"VID_054C&PID_0DF2", .product = L"DualSense Wireless Controller" },
+ };
+ 
+ static const WCHAR *find_product_name_override(const WCHAR *device_id)
+-- 
+2.52.0
+
