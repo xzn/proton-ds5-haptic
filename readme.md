@@ -10,27 +10,27 @@ For haptic in Stellar Blade and Spider-Man Remastered/Miles Morales:
 - 0002-setupapi-Set-DeviceContainers-registry-values-when-c.patch
 - 0003-xaudio2-faudio-Implement-taking-device-ids-to-create.patch
 
-For haptic when controller is hotplugged:
-
-- 0004-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
-- 0005-mmdevapi-Call-registered-IMMNotificationClients-when.patch
-
 For haptic in Death Stranding Director's Cut and God of War Ragnarok:
 
-- 0006-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
-- 0007-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
+- 0004-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
+- 0005-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
 
 For DSDC crash when controller hotplug patched:
 
-- 0008-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
+- 0006-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
 
 For DSDC crash when PulseAudio server is disconnected/restarted, and other misc changes:
 
-- 0009-mmdevapi-faudio-xaudio2-Delay-create-thread-for-mast.patch
+- 0007-mmdevapi-faudio-xaudio2-Reorganize-create-thread-for.patch
 
 For Helldivers 2 end of 2025 update:
 
-- 0010-hid-mmdevapi-full-name-for-DualSense-Wireless-Contro.patch
+- 0008-hid-mmdevapi-full-name-for-DualSense-Wireless-Contro.patch
+
+For haptic when controller is hotplugged:
+
+- 0009-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
+- 0010-mmdevapi-Call-registered-IMMNotificationClients-when.patch
 
 Note:
 
