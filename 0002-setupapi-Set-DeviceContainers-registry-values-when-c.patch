@@ -1,4 +1,4 @@
-From f09de5c408bbb61eda231eb4462c8a921f2a4ed4 Mon Sep 17 00:00:00 2001
+From 082193a3785a85e7cd49d32c3c3a17aef7ced2a5 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
 Subject: [PATCH 02/10] setupapi: Set DeviceContainers registry values when
