@@ -1,7 +1,7 @@
-From 0afe594d78eb1795edeb6599941e9a7db3bdb494 Mon Sep 17 00:00:00 2001
+From 7091a42a0e96cfbc8f379a1b26fd76055c1e0a9e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 29 Dec 2025 23:20:56 -0400
-Subject: [PATCH 10/10] hid/mmdevapi: full name for DualSense Wireless
+Subject: [PATCH 08/10] hid/mmdevapi: full name for DualSense Wireless
  Controller
 
 ---
@@ -25,10 +25,10 @@ index 88e632e2881..b2d5a1c58d2 100644
  
  static const WCHAR *find_device_string( const WCHAR *device_id, ULONG index )
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index c6fd0cadd04..b63e83d5136 100644
+index 0ce2a57bd6e..c8706e41c9c 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -540,8 +540,8 @@ struct product_name_overrides
+@@ -497,8 +497,8 @@ struct product_name_overrides
  static const struct product_name_overrides product_name_overrides[] =
  {
      /* Sony controllers */

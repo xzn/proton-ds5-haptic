@@ -1,7 +1,7 @@
-From 0673e4fa3e7af07ce8c89996fcbbbf75a1abad37 Mon Sep 17 00:00:00 2001
+From 9cf27f95b5c44f34d2179c7c66bd47d7ce90ab42 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 20:41:59 -0400
-Subject: [PATCH 05/10] mmdevapi: Call registered IMMNotificationClients when
+Subject: [PATCH 10/10] mmdevapi: Call registered IMMNotificationClients when
  updating states/adding devices.
 
 ---
@@ -9,7 +9,7 @@ Subject: [PATCH 05/10] mmdevapi: Call registered IMMNotificationClients when
  1 file changed, 132 insertions(+), 76 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 25fa7661daf..f2871e51888 100644
+index 48716db41b3..4f7d327569f 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -89,8 +89,24 @@ static CRITICAL_SECTION_DEBUG device_list_cs_debug =
@@ -293,7 +293,7 @@ index 25fa7661daf..f2871e51888 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1614,22 +1686,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1615,22 +1687,6 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
      return E_INVALIDARG;
  }
  

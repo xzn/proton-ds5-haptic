@@ -1,7 +1,7 @@
-From d910f10d7ce8df6e081f81e6d722f18a3ad98dd6 Mon Sep 17 00:00:00 2001
+From 1555c0b863492fe5de7718372a94cecfac55a7f6 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 20:33:29 -0400
-Subject: [PATCH 08/10] faudio/xaudio2: Partially rewrite asserts to error
+Subject: [PATCH 06/10] faudio/xaudio2: Partially rewrite asserts to error
  handling to avoid crash when audio device in use is disconnected.
 
 ---

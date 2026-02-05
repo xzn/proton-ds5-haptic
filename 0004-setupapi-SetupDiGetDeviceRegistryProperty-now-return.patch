@@ -1,7 +1,7 @@
-From a6b58ee52f3b19215417947c2d41978ee59117c6 Mon Sep 17 00:00:00 2001
+From 70a77c7b8a743a268d08686efc54aa5e4160e236 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
-Subject: [PATCH 06/10] setupapi: SetupDiGetDeviceRegistryProperty now returns
+Subject: [PATCH 04/10] setupapi: SetupDiGetDeviceRegistryProperty now returns
  all lower case for SPDRP_BASE_CONTAINERID; SetupDiGetDeviceRegistryPropertyA
  should return wide string for type GUID.
 
