@@ -1,4 +1,4 @@
-From 1555c0b863492fe5de7718372a94cecfac55a7f6 Mon Sep 17 00:00:00 2001
+From e7d40281e15be8dc882a93b1ecda71bc55fcf327 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 20:33:29 -0400
 Subject: [PATCH 06/10] faudio/xaudio2: Partially rewrite asserts to error
@@ -1419,5 +1419,5 @@ index ec2df015088..3168cbfc50a 100644
  	}
  	impl->output_pos = 0;
 -- 
-2.52.0
+2.53.0
 

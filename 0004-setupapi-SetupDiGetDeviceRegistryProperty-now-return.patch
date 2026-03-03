@@ -1,4 +1,4 @@
-From 70a77c7b8a743a268d08686efc54aa5e4160e236 Mon Sep 17 00:00:00 2001
+From 918515e8bff7bfc8e93cfa68c933f32fc09c2faf Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Sun, 7 Dec 2025 02:55:09 -0400
 Subject: [PATCH 04/10] setupapi: SetupDiGetDeviceRegistryProperty now returns
@@ -53,5 +53,5 @@ index 7690a50506b..b1f55f80145 100644
  }
  
 -- 
-2.52.0
+2.53.0
 

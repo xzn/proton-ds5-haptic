@@ -1,4 +1,4 @@
-From e82597dfd314edec01660254aaa8c2f8025939f9 Mon Sep 17 00:00:00 2001
+From d3e70301ca47350058d10d3cbf5f2a190acc98bb Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
 Subject: [PATCH 09/10] winepulse/mmdevapi: Add support for hotplugged audio
@@ -14,7 +14,7 @@ Subject: [PATCH 09/10] winepulse/mmdevapi: Add support for hotplugged audio
  6 files changed, 902 insertions(+), 271 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index c8706e41c9c..48716db41b3 100644
+index d9d0d6ff340..d53098cb37b 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
@@ -72,7 +72,7 @@ index c8706e41c9c..48716db41b3 100644
      }else if(cur->ref > 0)
          WARN("Modifying an MMDevice with positive reference count!\n");
  
-@@ -750,10 +765,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -749,10 +764,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
      if (setdefault)
      {
@@ -85,7 +85,7 @@ index c8706e41c9c..48716db41b3 100644
      }
      return cur;
  }
-@@ -777,7 +794,10 @@ HRESULT load_devices_from_reg(void)
+@@ -776,7 +793,10 @@ HRESULT load_devices_from_reg(void)
      curflow = eCapture;
      if (ret != ERROR_SUCCESS)
      {
@@ -97,7 +97,7 @@ index c8706e41c9c..48716db41b3 100644
          key_render = key_capture = NULL;
          WARN("Couldn't create key: %lu\n", ret);
          return E_FAIL;
-@@ -867,34 +887,153 @@ static HRESULT set_format(MMDevice *dev)
+@@ -866,34 +886,153 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -263,7 +263,7 @@ index c8706e41c9c..48716db41b3 100644
  
  end:
      free(params.endpoints);
-@@ -1070,7 +1209,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1069,7 +1208,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
@@ -272,7 +272,7 @@ index c8706e41c9c..48716db41b3 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1160,6 +1299,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1159,6 +1298,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -280,7 +280,7 @@ index c8706e41c9c..48716db41b3 100644
      LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
      {
          if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1169,8 +1309,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1168,8 +1308,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      if (This->devices_count)
      {
          This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
@@ -292,7 +292,7 @@ index c8706e41c9c..48716db41b3 100644
  
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
-@@ -1182,6 +1324,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1181,6 +1323,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
              }
          }
      }
@@ -303,7 +303,7 @@ index c8706e41c9c..48716db41b3 100644
  
      return S_OK;
  }
-@@ -1281,8 +1427,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
+@@ -1280,8 +1426,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
  void MMDevEnum_Free(void)
  {
      MMDevice *device, *next;
@@ -315,7 +315,7 @@ index c8706e41c9c..48716db41b3 100644
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
      key_render = key_capture = NULL;
-@@ -1303,6 +1452,7 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+@@ -1302,6 +1451,7 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -323,7 +323,7 @@ index c8706e41c9c..48716db41b3 100644
      return S_OK;
  }
  
-@@ -1408,10 +1558,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1407,10 +1557,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -336,7 +336,7 @@ index c8706e41c9c..48716db41b3 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1435,6 +1587,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1434,6 +1586,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          return S_OK;
      }
  
@@ -344,7 +344,7 @@ index c8706e41c9c..48716db41b3 100644
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1449,6 +1602,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1448,6 +1601,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -352,7 +352,7 @@ index c8706e41c9c..48716db41b3 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1456,6 +1610,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1455,6 +1609,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -360,7 +360,7 @@ index c8706e41c9c..48716db41b3 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1468,7 +1623,6 @@ struct NotificationClientWrapper {
+@@ -1467,7 +1622,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
@@ -368,7 +368,7 @@ index c8706e41c9c..48716db41b3 100644
  static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
  {
      0, 0, &g_notif_lock,
-@@ -1644,6 +1798,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1643,6 +1797,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
@@ -378,7 +378,7 @@ index c8706e41c9c..48716db41b3 100644
      return S_OK;
  }
  
-@@ -1829,6 +1986,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
+@@ -1828,6 +1985,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
          if (!pv->pwszVal)
              return E_OUTOFMEMORY;
          StringFromGUID2(&This->parent->devguid, pv->pwszVal, 39);
@@ -1706,5 +1706,5 @@ index 181f9161518..f1bdee5729d 100644
      return STATUS_SUCCESS;
  }
 -- 
-2.52.0
+2.53.0
 

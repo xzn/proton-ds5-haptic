@@ -1,4 +1,4 @@
-From a11e9de8374f12e7773b86587793833946fb2d19 Mon Sep 17 00:00:00 2001
+From 35b2a87ed506e65b05b49e02987233e1cf8620ca Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
 Subject: [PATCH 07/10] mmdevapi/faudio/xaudio2: Reorganize create thread for
@@ -506,5 +506,5 @@ index 3168cbfc50a..2e313678535 100644
  	hr = FAudio_OpenDevice(index, deviceId, &device);
  	if (FAILED(hr))
 -- 
-2.52.0
+2.53.0
 

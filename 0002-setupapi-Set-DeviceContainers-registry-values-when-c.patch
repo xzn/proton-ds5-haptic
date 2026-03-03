@@ -1,4 +1,4 @@
-From 082193a3785a85e7cd49d32c3c3a17aef7ced2a5 Mon Sep 17 00:00:00 2001
+From 3accd2ff8ef088cd832f2a5ffdfd47ef8a53506e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:32:25 -0400
 Subject: [PATCH 02/10] setupapi: Set DeviceContainers registry values when
@@ -143,5 +143,5 @@ index 0c222d0c19d..7690a50506b 100644
      {
          LONG l = RegSetValueExA(device->key, PropertyMap[Property].nameA, 0,
 -- 
-2.52.0
+2.53.0
 

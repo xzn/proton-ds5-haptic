@@ -1,4 +1,4 @@
-From ab7463bd90c9cc480edf01ebff8733c692d9f22c Mon Sep 17 00:00:00 2001
+From 4d6ee10a1d6572c687010ac4fc5d41462c92a698 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 19:54:35 -0400
 Subject: [PATCH 03/10] xaudio2/faudio: Implement taking device ids to create
@@ -15,10 +15,10 @@ Subject: [PATCH 03/10] xaudio2/faudio: Implement taking device ids to create
  7 files changed, 200 insertions(+), 49 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 8a96f6fe0e7..0ce2a57bd6e 100644
+index 2681853eb50..0a84389dc26 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -1447,7 +1447,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1446,7 +1446,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
              continue;
          }
  
@@ -477,5 +477,5 @@ index 20f15e8fb96..ec2df015088 100644
  
  	/* Set the Device Display Name */
 -- 
-2.52.0
+2.53.0
 

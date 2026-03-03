@@ -1,4 +1,4 @@
-From 7091a42a0e96cfbc8f379a1b26fd76055c1e0a9e Mon Sep 17 00:00:00 2001
+From d349336c76b8430f0e1491a35408ae34318d0537 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 29 Dec 2025 23:20:56 -0400
 Subject: [PATCH 08/10] hid/mmdevapi: full name for DualSense Wireless
@@ -25,7 +25,7 @@ index 88e632e2881..b2d5a1c58d2 100644
  
  static const WCHAR *find_device_string( const WCHAR *device_id, ULONG index )
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 0ce2a57bd6e..c8706e41c9c 100644
+index 0a84389dc26..d9d0d6ff340 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -497,8 +497,8 @@ struct product_name_overrides
@@ -40,5 +40,5 @@ index 0ce2a57bd6e..c8706e41c9c 100644
  
  static const WCHAR *find_product_name_override(const WCHAR *device_id)
 -- 
-2.52.0
+2.53.0
 

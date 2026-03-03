@@ -1,4 +1,4 @@
-From 439eeb615e71ea68a0464e25f459f3e199cb40c9 Mon Sep 17 00:00:00 2001
+From f518df15b5569e3246c837c6029891aaa569aea8 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 17:11:04 -0400
 Subject: [PATCH 01/10] mmdevapi/setupapi: HACK: Set MMDevices properties in
@@ -6,9 +6,9 @@ Subject: [PATCH 01/10] mmdevapi/setupapi: HACK: Set MMDevices properties in
 
 ---
  dlls/mmdevapi/Makefile.in |   2 +-
- dlls/mmdevapi/devenum.c   | 193 +++++++++++++++++++++++++++++---------
+ dlls/mmdevapi/devenum.c   | 177 ++++++++++++++++++++++++++++++++------
  dlls/setupapi/devinst.c   |  32 ++++++-
- 3 files changed, 182 insertions(+), 45 deletions(-)
+ 3 files changed, 182 insertions(+), 29 deletions(-)
 
 diff --git a/dlls/mmdevapi/Makefile.in b/dlls/mmdevapi/Makefile.in
 index 90c2302ef50..cfdde576e39 100644
@@ -22,7 +22,7 @@ index 90c2302ef50..cfdde576e39 100644
  SOURCES = \
  	audiosessionmanager.c \
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index e4f81e58e6c..8a96f6fe0e7 100644
+index e1fdda8f66c..2681853eb50 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -36,6 +36,7 @@
@@ -234,25 +234,19 @@ index e4f81e58e6c..8a96f6fe0e7 100644
  
      cur->flow = flow;
      cur->state = state;
-@@ -556,7 +679,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
- 
-     if (RegCreateKeyExW(root, guidstr, 0, NULL, 0, KEY_WRITE|KEY_READ|KEY_WOW64_64KEY, NULL, &key, NULL) == ERROR_SUCCESS)
-     {
--        const char *sgi = getenv("SteamGameId");
-         HKEY keyprop;
- 
-         RegSetValueExW(key, L"DeviceState", 0, REG_DWORD, (const BYTE*)&state, sizeof(DWORD));
-@@ -564,9 +686,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -561,11 +684,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+         if (!RegCreateKeyExW(key, L"Properties", 0, NULL, 0, KEY_WRITE|KEY_READ|KEY_WOW64_64KEY, NULL, &keyprop, NULL))
          {
              PROPVARIANT pv;
- 
+-            WCHAR *type;
+-            DWORD len;
+-
 -            pv.vt = VT_LPWSTR;
 -            pv.pwszVal = cur->drv_id;
--
+ 
              if (SUCCEEDED(set_driver_prop_value(id, flow, &devicepath_key))) {
                  PROPVARIANT pv2;
- 
-@@ -574,46 +693,31 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -574,29 +692,31 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
                  if (SUCCEEDED(MMDevice_GetPropValue(id, flow, &devicepath_key, &pv2)) && pv2.vt == VT_LPWSTR) {
                      const WCHAR *override;
@@ -267,42 +261,25 @@ index e4f81e58e6c..8a96f6fe0e7 100644
                  PropVariantClear(&pv2);
              }
  
--            if (sgi && !strcmp(sgi, "739630"))
--            {
--                const WCHAR *type = L"Other Device";
--                DWORD len;
--
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
 +            pv.vt = VT_LPWSTR;
- 
--                if (flow == eCapture)
--                    type = L"Microphone";
--                else if (flow == eRender)
--                    type = L"Speakers";
++
 +            pv.pwszVal = friendly_name;
 +            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
- 
--                pv.pwszVal = (LPWSTR)type;
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
++
 +            pv.pwszVal = (LPWSTR)device_iname;
-+            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
+             MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
  
--                len = (wcslen(type) + wcslen(cur->drv_id) + wcslen(L" ()") + 1) * sizeof(WCHAR);
--                pv.vt = VT_LPWSTR;
--                pv.pwszVal = CoTaskMemAlloc(len);
--                swprintf(pv.pwszVal, len, L"%ls (%ls)", type, cur->drv_id);
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
--                CoTaskMemFree(pv.pwszVal);
--            }
--            else
--            {
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
--                MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
--            }
+-            pv.pwszVal = type = (WCHAR *)(flow == eCapture ? L"Microphone" : L"Speakers");
 +            pv.pwszVal = (LPWSTR)device_desc;
-+            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
+             MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
  
+-            len = (wcslen(type) + wcslen(cur->drv_id) + wcslen(L" ()") + 1);
+-            pv.vt = VT_LPWSTR;
+-            pv.pwszVal = CoTaskMemAlloc(len * sizeof(WCHAR));
+-            swprintf(pv.pwszVal, len, L"%ls (%ls)", type, cur->drv_id);
+-            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
+-            CoTaskMemFree(pv.pwszVal);
+-
              pv.pwszVal = guidstr;
              MMDevice_SetPropValue(id, flow, &deviceinterface_key, &pv);
  
@@ -312,7 +289,7 @@ index e4f81e58e6c..8a96f6fe0e7 100644
  
              if (FAILED(set_driver_prop_value(id, flow, &PKEY_AudioEndpoint_FormFactor)))
              {
-@@ -641,6 +745,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -624,6 +744,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          RegCloseKey(key);
      }
  
@@ -322,7 +299,7 @@ index e4f81e58e6c..8a96f6fe0e7 100644
      if (setdefault)
      {
          if (flow == eRender)
-@@ -698,7 +805,7 @@ HRESULT load_devices_from_reg(void)
+@@ -681,7 +804,7 @@ HRESULT load_devices_from_reg(void)
          if (ret != ERROR_SUCCESS)
              continue;
          if (SUCCEEDED(CLSIDFromString(guidvalue, &guid))
@@ -390,5 +367,5 @@ index f206e65579b..0c222d0c19d 100644
  
                          len = sizeof(symbolicLink);
 -- 
-2.52.0
+2.53.0
 
