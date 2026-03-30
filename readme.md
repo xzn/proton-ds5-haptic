@@ -32,6 +32,10 @@ For haptic when controller is hotplugged:
 - 0009-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
 - 0010-mmdevapi-Call-registered-IMMNotificationClients-when.patch
 
+For Monster Hunter Wilds:
+
+- 0011-mmdevapi-setupapi-HACK-additionally-set-usb-audio-en.patch
+
 Note:
 
 If you are patching on top of wine-staging, the following patch need to be excluded:

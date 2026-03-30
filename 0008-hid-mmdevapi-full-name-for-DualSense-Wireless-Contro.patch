@@ -1,7 +1,7 @@
-From d349336c76b8430f0e1491a35408ae34318d0537 Mon Sep 17 00:00:00 2001
+From a585cc85c6cbae735202a8dc2fb0f8490f62e8d9 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 29 Dec 2025 23:20:56 -0400
-Subject: [PATCH 08/10] hid/mmdevapi: full name for DualSense Wireless
+Subject: [PATCH 08/11] hid/mmdevapi: full name for DualSense Wireless
  Controller
 
 ---

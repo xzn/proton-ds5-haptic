@@ -1,7 +1,7 @@
-From f518df15b5569e3246c837c6029891aaa569aea8 Mon Sep 17 00:00:00 2001
+From ea0722f205454b9848c73aee8367507f9df40ac2 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Mon, 1 Dec 2025 17:11:04 -0400
-Subject: [PATCH 01/10] mmdevapi/setupapi: HACK: Set MMDevices properties in
+Subject: [PATCH 01/11] mmdevapi/setupapi: HACK: Set MMDevices properties in
  setupapi (without using a pnp driver).
 
 ---

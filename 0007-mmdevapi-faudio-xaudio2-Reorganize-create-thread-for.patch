@@ -1,7 +1,7 @@
-From 35b2a87ed506e65b05b49e02987233e1cf8620ca Mon Sep 17 00:00:00 2001
+From dcea06c04f41c05535e4f27a464b0514c6e990bf Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Wed, 10 Dec 2025 23:09:50 -0400
-Subject: [PATCH 07/10] mmdevapi/faudio/xaudio2: Reorganize create thread for
+Subject: [PATCH 07/11] mmdevapi/faudio/xaudio2: Reorganize create thread for
  mastering audio; delay kernelbase resolve; get default audio endpoint
  directly.
 

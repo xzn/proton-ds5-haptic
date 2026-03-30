@@ -1,7 +1,7 @@
-From d3e70301ca47350058d10d3cbf5f2a190acc98bb Mon Sep 17 00:00:00 2001
+From 6254f21ff36a802af64df3911cd108fa1b4b9b4e Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
 Date: Tue, 2 Dec 2025 19:25:13 -0400
-Subject: [PATCH 09/10] winepulse/mmdevapi: Add support for hotplugged audio
+Subject: [PATCH 09/11] winepulse/mmdevapi: Add support for hotplugged audio
  devices to be updated in the device list.
 
 ---
