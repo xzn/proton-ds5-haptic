@@ -1,23 +1,22 @@
-From 6254f21ff36a802af64df3911cd108fa1b4b9b4e Mon Sep 17 00:00:00 2001
+From 4797f8239f21f8d009bf726e648f924a5ed212b3 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
-Date: Tue, 2 Dec 2025 19:25:13 -0400
-Subject: [PATCH 09/11] winepulse/mmdevapi: Add support for hotplugged audio
+Date: Wed, 24 Jun 2026 14:02:57 -0300
+Subject: [PATCH 10/11] winepulse/mmdevapi: Add support for hotplugged audio
  devices to be updated in the device list.
 
 ---
- dlls/mmdevapi/devenum.c          | 192 ++++++-
+ dlls/mmdevapi/devenum.c          | 219 ++++++-
  dlls/mmdevapi/main.c             |   1 +
  dlls/mmdevapi/mmdevapi_private.h |   1 +
  dlls/mmdevapi/unixlib.h          |   9 +
- dlls/winepulse.drv/mmdevdrv.c    |  20 +-
- dlls/winepulse.drv/pulse.c       | 950 +++++++++++++++++++++++--------
- 6 files changed, 902 insertions(+), 271 deletions(-)
+ dlls/winepulse.drv/pulse.c       | 951 +++++++++++++++++++++++--------
+ 5 files changed, 909 insertions(+), 272 deletions(-)
 
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index d9d0d6ff340..d53098cb37b 100644
+index eff6c3bcb7a..f895681e94f 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -79,8 +79,19 @@ static const IMMEndpointVtbl MMEndpointVtbl;
+@@ -79,6 +79,17 @@ static const IMMEndpointVtbl MMEndpointVtbl;
  
  static MMDevEnumImpl enumerator;
  static struct list device_list = LIST_INIT(device_list);
@@ -29,32 +28,101 @@ index d9d0d6ff340..d53098cb37b 100644
 +      0, 0, { (DWORD_PTR)(__FILE__ ": device_list_cs") }
 +};
 +static CRITICAL_SECTION device_list_cs = { &device_list_cs_debug, -1, 0, 0, 0, 0 };
- static IMMDevice info_device;
- 
++
 +/* forward declare */
 +static CRITICAL_SECTION g_notif_lock;
-+
+ 
  typedef struct MMDevColImpl
  {
-     IMMDeviceCollection IMMDeviceCollection_iface;
-@@ -140,7 +151,7 @@ static inline IDeviceTopologyImpl *impl_from_IDeviceTopology(IDeviceTopology *if
+@@ -139,7 +150,7 @@ static inline IDeviceTopologyImpl *impl_from_IDeviceTopology(IDeviceTopology *if
      return CONTAINING_RECORD(iface, IDeviceTopologyImpl, IDeviceTopology_iface);
  }
  
 -static const WCHAR propkey_formatW[] = L"{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X},%d";
 +static const WCHAR propkey_formatW[] = L"{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x},%d";
  
- static HRESULT MMDevPropStore_OpenPropKey(const GUID *guid, DWORD flow, HKEY *propkey)
+ struct device
  {
-@@ -640,6 +651,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -149,6 +160,14 @@ struct device
+     char        name[];
+ };
  
++static CRITICAL_SECTION devices_cache_cs;
++static CRITICAL_SECTION_DEBUG devices_cache_cs_debug =
++{
++    0, 0, &devices_cache_cs,
++    { &devices_cache_cs_debug.ProcessLocksList, &devices_cache_cs_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": devices_cache_cs") }
++};
++static CRITICAL_SECTION devices_cache_cs = { &devices_cache_cs_debug, -1, 0, 0, 0, 0 };
+ static struct list devices_cache = LIST_INIT( devices_cache );
+ 
+ static void add_device_to_cache( const GUID *guid, const char *name, EDataFlow flow )
+@@ -178,15 +197,21 @@ BOOL get_device_name_from_guid( const GUID *guid, char **name, EDataFlow *flow )
+     DWORD index = 0;
+     HKEY key;
+ 
++    EnterCriticalSection( &devices_cache_cs );
+     if ((dev = find_device_in_cache( guid )))
+     {
+         *name = strdup(dev->name);
+         *flow = dev->flow;
++
++        LeaveCriticalSection( &devices_cache_cs );
+         return TRUE;
+     }
+ 
+     swprintf( key_name, ARRAY_SIZE(key_name), L"Software\\Wine\\Drivers\\%s\\devices", drvs.module_name );
+-    if (RegOpenKeyExW( HKEY_CURRENT_USER, key_name, 0, KEY_READ | KEY_WOW64_64KEY, &key )) return FALSE;
++    if (RegOpenKeyExW( HKEY_CURRENT_USER, key_name, 0, KEY_READ | KEY_WOW64_64KEY, &key )) {
++        LeaveCriticalSection( &devices_cache_cs );
++        return FALSE;
++    }
+ 
+     for (;;)
+     {
+@@ -210,13 +235,20 @@ BOOL get_device_name_from_guid( const GUID *guid, char **name, EDataFlow *flow )
+         RegCloseKey( key );
+         TRACE( "Found matching device key %s for %s\n", wine_dbgstr_w(key_name), debugstr_guid(guid) );
+         size = WideCharToMultiByte( CP_UNIXCP, 0, key_name + 2, -1, NULL, 0, NULL, NULL );
+-        if (!(*name = malloc( size ))) return FALSE;
++        if (!(*name = malloc( size ))) {
++            LeaveCriticalSection( &devices_cache_cs );
++            return FALSE;
++        }
+         WideCharToMultiByte( CP_UNIXCP, 0, key_name + 2, -1, *name, size, NULL, NULL );
+         add_device_to_cache( guid, *name, *flow );
++
++        LeaveCriticalSection( &devices_cache_cs );
+         return TRUE;
+     }
+     RegCloseKey( key );
+     WARN( "No matching device in registry for %s\n", debugstr_guid(guid) );
++
++    LeaveCriticalSection( &devices_cache_cs );
+     return FALSE;
+ }
+ 
+@@ -245,7 +277,10 @@ static void get_device_guid( EDataFlow flow, const char *dev_name, GUID *guid )
+         RegSetValueExW( key, L"guid", 0, REG_BINARY, (BYTE *)guid, sizeof(*guid) );
+     }
+     RegCloseKey( key );
++
++    EnterCriticalSection( &devices_cache_cs );
+     if (!find_device_in_cache( guid )) add_device_to_cache( guid, dev_name, flow );
++    LeaveCriticalSection( &devices_cache_cs );
+ }
+ 
+ static HRESULT MMDevPropStore_OpenPropKey(const GUID *guid, DWORD flow, HKEY *propkey)
+@@ -828,6 +863,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+     PropVariantInit(&device_path);
      PropVariantInit(&container_id);
  
 +    EnterCriticalSection(&device_list_cs);
      LIST_FOR_EACH_ENTRY(device, &device_list, MMDevice, entry)
      {
          if (device->flow == flow && IsEqualGUID(&device->devguid, id)){
-@@ -647,6 +659,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -835,6 +871,7 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
              break;
          }
      }
@@ -62,7 +130,7 @@ index d9d0d6ff340..d53098cb37b 100644
  
      if(!cur){
          /* No device found, allocate new one */
-@@ -657,7 +670,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -845,7 +882,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          cur->IMMDevice_iface.lpVtbl = &MMDeviceVtbl;
          cur->IMMEndpoint_iface.lpVtbl = &MMEndpointVtbl;
  
@@ -72,7 +140,7 @@ index d9d0d6ff340..d53098cb37b 100644
      }else if(cur->ref > 0)
          WARN("Modifying an MMDevice with positive reference count!\n");
  
-@@ -749,10 +764,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -940,10 +979,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
      if (setdefault)
      {
@@ -85,7 +153,7 @@ index d9d0d6ff340..d53098cb37b 100644
      }
      return cur;
  }
-@@ -776,7 +793,10 @@ HRESULT load_devices_from_reg(void)
+@@ -967,7 +1008,10 @@ HRESULT load_devices_from_reg(void)
      curflow = eCapture;
      if (ret != ERROR_SUCCESS)
      {
@@ -97,7 +165,7 @@ index d9d0d6ff340..d53098cb37b 100644
          key_render = key_capture = NULL;
          WARN("Couldn't create key: %lu\n", ret);
          return E_FAIL;
-@@ -866,34 +886,153 @@ static HRESULT set_format(MMDevice *dev)
+@@ -1057,34 +1101,153 @@ static HRESULT set_format(MMDevice *dev)
      return S_OK;
  }
  
@@ -111,7 +179,7 @@ index d9d0d6ff340..d53098cb37b 100644
 +        MMDevice *dev;
 +        const WCHAR *name = (WCHAR *)((char *)params->endpoints + params->endpoints[i].name);
 +        const char *dev_name = (char *)params->endpoints + params->endpoints[i].device;
-+        drvs.pget_device_guid(params->flow, dev_name, &guid);
++        get_device_guid(params->flow, dev_name, &guid);
 +        dev = MMDevice_Create(name, &guid, params->flow, DEVICE_STATE_ACTIVE, params->default_idx == i);
 +        set_format(dev);
 +    }
@@ -155,7 +223,7 @@ index d9d0d6ff340..d53098cb37b 100644
 +            MMDevice *dev;
 +            UINT i_removed = params.num + i;
 +            const char *dev_name = (char *)params.endpoints + params.endpoints[i_removed].device;
-+            drvs.pget_device_guid(params.flow, dev_name, &guid);
++            get_device_guid( params.flow, dev_name, &guid );
 +
 +            EnterCriticalSection(&device_list_cs);
 +            LIST_FOR_EACH_ENTRY(dev, &device_list, MMDevice, entry) {
@@ -252,7 +320,7 @@ index d9d0d6ff340..d53098cb37b 100644
 -        const WCHAR *name = (WCHAR *)((char *)params.endpoints + params.endpoints[i].name);
 -        const char *dev_name = (char *)params.endpoints + params.endpoints[i].device;
 -
--        drvs.pget_device_guid(flow, dev_name, &guid);
+-        get_device_guid( flow, dev_name, &guid );
 -
 -        dev = MMDevice_Create(name, &guid, flow, DEVICE_STATE_ACTIVE, params.default_idx == i);
 -        set_format(dev);
@@ -263,7 +331,7 @@ index d9d0d6ff340..d53098cb37b 100644
  
  end:
      free(params.endpoints);
-@@ -1069,7 +1208,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+@@ -1260,7 +1423,7 @@ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
      *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
      if (!str)
          return E_OUTOFMEMORY;
@@ -272,7 +340,7 @@ index d9d0d6ff340..d53098cb37b 100644
                This->flow, id->Data1, id->Data2, id->Data3,
                id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
                id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
-@@ -1159,6 +1298,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1350,6 +1513,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      This->devices_count = 0;
      *ppv = &This->IMMDeviceCollection_iface;
  
@@ -280,7 +348,7 @@ index d9d0d6ff340..d53098cb37b 100644
      LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
      {
          if ((cur->flow == flow || flow == eAll) && (cur->state & state))
-@@ -1168,8 +1308,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1359,8 +1523,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
      if (This->devices_count)
      {
          This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
@@ -292,21 +360,20 @@ index d9d0d6ff340..d53098cb37b 100644
  
          LIST_FOR_EACH_ENTRY(cur, &device_list, MMDevice, entry)
          {
-@@ -1181,6 +1323,10 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+@@ -1372,6 +1538,9 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
              }
          }
      }
 +    LeaveCriticalSection(&device_list_cs);
 +
-+    /* Delay create thread as much as possible. */
 +    create_update_thread();
  
      return S_OK;
  }
-@@ -1280,8 +1426,11 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
- void MMDevEnum_Free(void)
- {
+@@ -1473,8 +1642,11 @@ void MMDevEnum_Free(void)
      MMDevice *device, *next;
+     struct device *dev, *dev_next;
+ 
 +    EnterCriticalSection(&device_list_cs);
      LIST_FOR_EACH_ENTRY_SAFE(device, next, &device_list, MMDevice, entry)
          MMDevice_Destroy(device);
@@ -314,8 +381,8 @@ index d9d0d6ff340..d53098cb37b 100644
 +    LeaveCriticalSection(&device_list_cs);
      RegCloseKey(key_render);
      RegCloseKey(key_capture);
-     key_render = key_capture = NULL;
-@@ -1302,6 +1451,7 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
+     LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, &devices_cache, struct device, entry)
+@@ -1496,6 +1668,7 @@ static HRESULT WINAPI MMDevEnum_QueryInterface(IMMDeviceEnumerator *iface, REFII
      if (!*ppv)
          return E_NOINTERFACE;
      IUnknown_AddRef((IUnknown*)*ppv);
@@ -323,7 +390,7 @@ index d9d0d6ff340..d53098cb37b 100644
      return S_OK;
  }
  
-@@ -1407,10 +1557,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+@@ -1601,10 +1774,12 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
          RegCloseKey(key);
      }
  
@@ -336,15 +403,15 @@ index d9d0d6ff340..d53098cb37b 100644
  
      if (!*device)
          return E_NOTFOUND;
-@@ -1434,6 +1586,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
-         return S_OK;
-     }
+@@ -1623,6 +1798,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+     if(!name || !device)
+         return E_POINTER;
  
 +    EnterCriticalSection(&device_list_cs);
      LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
      {
          HRESULT hr;
-@@ -1448,6 +1601,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1637,6 +1813,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
  
          if (str && !lstrcmpiW(str, name))
          {
@@ -352,7 +419,7 @@ index d9d0d6ff340..d53098cb37b 100644
              CoTaskMemFree(str);
              IMMDevice_AddRef(dev);
              *device = dev;
-@@ -1455,6 +1609,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
+@@ -1644,6 +1821,7 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
          }
          CoTaskMemFree(str);
      }
@@ -360,7 +427,7 @@ index d9d0d6ff340..d53098cb37b 100644
      TRACE("Could not find device %s\n", debugstr_w(name));
      return E_INVALIDARG;
  }
-@@ -1467,7 +1622,6 @@ struct NotificationClientWrapper {
+@@ -1656,7 +1834,6 @@ struct NotificationClientWrapper {
  static struct list g_notif_clients = LIST_INIT(g_notif_clients);
  static HANDLE g_notif_thread;
  
@@ -368,7 +435,7 @@ index d9d0d6ff340..d53098cb37b 100644
  static CRITICAL_SECTION_DEBUG g_notif_lock_debug =
  {
      0, 0, &g_notif_lock,
-@@ -1643,6 +1797,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
+@@ -1832,6 +2009,9 @@ static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEn
  
      LeaveCriticalSection(&g_notif_lock);
  
@@ -378,7 +445,7 @@ index d9d0d6ff340..d53098cb37b 100644
      return S_OK;
  }
  
-@@ -1828,6 +1985,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
+@@ -2017,6 +2197,7 @@ static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTY
          if (!pv->pwszVal)
              return E_OUTOFMEMORY;
          StringFromGUID2(&This->parent->devguid, pv->pwszVal, 39);
@@ -387,22 +454,22 @@ index d9d0d6ff340..d53098cb37b 100644
      }
  
 diff --git a/dlls/mmdevapi/main.c b/dlls/mmdevapi/main.c
-index 5426870e7a3..1af2d7650e9 100644
+index 6d1616e5b55..46b2bfae3b7 100644
 --- a/dlls/mmdevapi/main.c
 +++ b/dlls/mmdevapi/main.c
-@@ -204,6 +204,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+@@ -220,6 +220,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+                 }
              }
- 
              main_loop_stop();
 +            stop_update_thread();
  
              if (!lpvReserved)
                  MMDevEnum_Free();
 diff --git a/dlls/mmdevapi/mmdevapi_private.h b/dlls/mmdevapi/mmdevapi_private.h
-index 304487eaf2b..66acbc7a8d4 100644
+index 672d901bf6d..4e80fe1e2f2 100644
 --- a/dlls/mmdevapi/mmdevapi_private.h
 +++ b/dlls/mmdevapi/mmdevapi_private.h
-@@ -76,6 +76,7 @@ extern HRESULT load_devices_from_reg(void);
+@@ -130,6 +130,7 @@ extern HRESULT load_devices_from_reg(void);
  extern HRESULT load_driver_devices(EDataFlow flow);
  
  extern void main_loop_stop(void);
@@ -411,7 +478,7 @@ index 304487eaf2b..66acbc7a8d4 100644
  extern const WCHAR drv_keyW[];
  
 diff --git a/dlls/mmdevapi/unixlib.h b/dlls/mmdevapi/unixlib.h
-index 097b129f564..b69c4a54c40 100644
+index 3df13e93b39..f8038f58e23 100644
 --- a/dlls/mmdevapi/unixlib.h
 +++ b/dlls/mmdevapi/unixlib.h
 @@ -49,6 +49,15 @@ struct get_endpoint_ids_params
@@ -430,74 +497,11 @@ index 097b129f564..b69c4a54c40 100644
  };
  
  struct create_stream_params
-diff --git a/dlls/winepulse.drv/mmdevdrv.c b/dlls/winepulse.drv/mmdevdrv.c
-index 0617c5977c9..8d913cd6af1 100644
---- a/dlls/winepulse.drv/mmdevdrv.c
-+++ b/dlls/winepulse.drv/mmdevdrv.c
-@@ -54,6 +54,14 @@ WINE_DEFAULT_DEBUG_CHANNEL(pulse);
- 
- #define MAX_PULSE_NAME_LEN 256
- 
-+static CRITICAL_SECTION g_devices_cache_cs;
-+static CRITICAL_SECTION_DEBUG g_devices_cache_cs_debug =
-+{
-+    0, 0, &g_devices_cache_cs,
-+    { &g_devices_cache_cs_debug.ProcessLocksList, &g_devices_cache_cs_debug.ProcessLocksList },
-+      0, 0, { (DWORD_PTR)(__FILE__ ": g_devices_cache_cs") }
-+};
-+static CRITICAL_SECTION g_devices_cache_cs = { &g_devices_cache_cs_debug, -1, 0, 0, 0, 0 };
- static struct list g_devices_cache = LIST_INIT(g_devices_cache);
- 
- struct device_cache {
-@@ -95,8 +103,11 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, void *reserved)
-         {
-             struct device_cache *device, *device_next;
- 
-+            EnterCriticalSection(&g_devices_cache_cs);
-             LIST_FOR_EACH_ENTRY_SAFE(device, device_next, &g_devices_cache, struct device_cache, entry)
-                 free(device);
-+            list_init(&g_devices_cache);
-+            LeaveCriticalSection(&g_devices_cache_cs);
-         }
-         break;
-     }
-@@ -174,15 +185,20 @@ BOOL WINAPI get_device_name_from_guid(GUID *guid, char **name, EDataFlow *flow)
-     }
- 
-     /* Check the cache first */
-+    EnterCriticalSection(&g_devices_cache_cs);
-     LIST_FOR_EACH_ENTRY(device, &g_devices_cache, struct device_cache, entry) {
-         if (!IsEqualGUID(guid, &device->guid))
-             continue;
-         *flow = device->dataflow;
--        if ((*name = strdup(device->pulse_name)))
-+        if ((*name = strdup(device->pulse_name))) {
-+            LeaveCriticalSection(&g_devices_cache_cs);
-             return TRUE;
-+        }
- 
-+        LeaveCriticalSection(&g_devices_cache_cs);
-         return FALSE;
-     }
-+    LeaveCriticalSection(&g_devices_cache_cs);
- 
-     if (RegOpenKeyExW(HKEY_CURRENT_USER, drv_key_devicesW, 0, KEY_READ | KEY_WOW64_64KEY, &key) != ERROR_SUCCESS) {
-         WARN("No devices found in registry\n");
-@@ -238,7 +254,9 @@ BOOL WINAPI get_device_name_from_guid(GUID *guid, char **name, EDataFlow *flow)
-                 device->guid = reg_guid;
-                 device->dataflow = *flow;
-                 memcpy(device->pulse_name, *name, len);
-+                EnterCriticalSection(&g_devices_cache_cs);
-                 list_add_tail(&g_devices_cache, &device->entry);
-+                LeaveCriticalSection(&g_devices_cache_cs);
-             }
-             return TRUE;
-         }
 diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
-index 181f9161518..f1bdee5729d 100644
+index 5c120a26e66..bb253986d26 100644
 --- a/dlls/winepulse.drv/pulse.c
 +++ b/dlls/winepulse.drv/pulse.c
-@@ -124,6 +124,19 @@ typedef struct _PhysDevice {
+@@ -129,6 +129,19 @@ typedef struct _PhysDevice {
      WCHAR *name;
      enum phys_device_bus_type bus_type;
      USHORT vendor_id, product_id;
@@ -517,7 +521,7 @@ index 181f9161518..f1bdee5729d 100644
      EndpointFormFactor form;
      UINT channel_mask;
      UINT index;
-@@ -136,9 +149,24 @@ typedef struct _PhysDevice {
+@@ -141,9 +154,24 @@ typedef struct _PhysDevice {
  static pa_context *pulse_ctx;
  static pa_mainloop *pulse_ml;
  
@@ -543,7 +547,7 @@ index 181f9161518..f1bdee5729d 100644
  static pthread_mutex_t pulse_mutex;
  static pthread_cond_t pulse_cond = PTHREAD_COND_INITIALIZER;
  
-@@ -149,6 +177,16 @@ static NTSTATUS pulse_not_implemented(void *args)
+@@ -157,6 +185,16 @@ static NTSTATUS pulse_not_implemented(void *args)
      return STATUS_SUCCESS;
  }
  
@@ -560,7 +564,7 @@ index 181f9161518..f1bdee5729d 100644
  static void pulse_lock(void)
  {
      pthread_mutex_lock(&pulse_mutex);
-@@ -169,6 +207,45 @@ static void pulse_broadcast(void)
+@@ -177,6 +215,45 @@ static void pulse_broadcast(void)
      pthread_cond_broadcast(&pulse_cond);
  }
  
@@ -606,7 +610,7 @@ index 181f9161518..f1bdee5729d 100644
  static struct pulse_stream *handle_get_stream(stream_handle h)
  {
      return (struct pulse_stream *)(UINT_PTR)h;
-@@ -185,16 +262,26 @@ static void dump_attr(const pa_buffer_attr *attr)
+@@ -193,16 +270,26 @@ static void dump_attr(const pa_buffer_attr *attr)
  
  static void free_phys_device_lists(void)
  {
@@ -638,7 +642,7 @@ index 181f9161518..f1bdee5729d 100644
  }
  
  /* copied from kernelbase */
-@@ -274,6 +361,12 @@ static NTSTATUS pulse_process_attach(void *args)
+@@ -282,6 +369,12 @@ static NTSTATUS pulse_process_attach(void *args)
      if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
          pthread_mutex_init(&pulse_mutex, NULL);
  
@@ -651,10 +655,11 @@ index 181f9161518..f1bdee5729d 100644
  #ifdef _WIN64
      if (NtCurrentTeb()->WowTebOffset)
      {
-@@ -298,15 +391,36 @@ static NTSTATUS pulse_process_detach(void *args)
-     if (pulse_ml)
-         pa_mainloop_quit(pulse_ml, 0);
+@@ -308,15 +401,37 @@ static NTSTATUS pulse_process_detach(void *args)
  
+     free( silence_buf );
+     silence_buf = NULL;
++
 +    pthread_mutex_destroy(&pulse_mutex);
 +    pthread_mutex_destroy(&pulse_ready_mutex);
 +    pthread_mutex_destroy(&g_phys_mutex);
@@ -689,7 +694,7 @@ index 181f9161518..f1bdee5729d 100644
  }
  
  static NTSTATUS pulse_main_loop(void *args)
-@@ -314,78 +428,197 @@ static NTSTATUS pulse_main_loop(void *args)
+@@ -324,78 +439,197 @@ static NTSTATUS pulse_main_loop(void *args)
      struct main_loop_params *params = args;
      int ret;
      pulse_lock();
@@ -935,7 +940,7 @@ index 181f9161518..f1bdee5729d 100644
  }
  
  static void pulse_stream_state(pa_stream *s, void *user)
-@@ -430,47 +663,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
+@@ -443,47 +677,6 @@ static BOOL pulse_stream_valid(struct pulse_stream *stream)
      return pa_stream_get_state(stream->stream) == PA_STREAM_READY;
  }
  
@@ -983,7 +988,7 @@ index 181f9161518..f1bdee5729d 100644
  static UINT pulse_channel_map_to_channel_mask(const pa_channel_map *map)
  {
      int i;
-@@ -633,10 +825,10 @@ static GUID get_container_id(const char *sysfs_path)
+@@ -646,10 +839,10 @@ static GUID get_container_id(const char *sysfs_path)
      create_usb_dev_container_id(init_time, vid, pid, bus_num, dev_num, &tmp_guid);
  
  exit:
@@ -996,7 +1001,7 @@ index 181f9161518..f1bdee5729d 100644
  
      TRACE("Returning %s.\n", debugstr_guid(&tmp_guid));
      return tmp_guid;
-@@ -679,58 +871,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
+@@ -692,58 +885,6 @@ static void fill_device_info(PhysDevice *dev, pa_proplist *p)
          dev->container_id = get_container_id(buffer);
  }
  
@@ -1055,7 +1060,7 @@ index 181f9161518..f1bdee5729d 100644
  /* For most hardware on Windows, users must choose a configuration with an even
   * number of channels (stereo, quad, 5.1, 7.1). Users can then disable
   * channels, but those channels are still reported to applications from
-@@ -814,80 +954,390 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
+@@ -827,80 +968,390 @@ static void convert_channel_map(const pa_channel_map *pa_map, WAVEFORMATEXTENSIB
      fmt->dwChannelMask = pa_mask;
  }
  
@@ -1288,30 +1293,26 @@ index 181f9161518..f1bdee5729d 100644
 +            pthread_cond_broadcast(&g_phys_cond);
 +            g_phys_unlock();
 +            return;
-         }
-     }
++        }
++    }
 +    LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, list_added, PhysDevice, entry) {
 +        if (dev->index == index) {
 +            list_remove(&dev->entry);
 +            list_add_tail(&g_phys_added_removed, &dev->entry);
 +            g_phys_unlock();
 +            return;
-+        }
-+    }
+         }
+     }
 +    g_phys_unlock();
 +}
- 
--    if (stream)
--        pa_stream_unref(stream);
++
 +static void pulse_remove_all_devices(EDataFlow flow)
 +{
 +    struct list *list = flow == eRender ? &g_phys_speakers : &g_phys_sources;
 +    struct list *list_added = flow == eRender ? &g_phys_speakers_added : &g_phys_sources_added;
 +    struct list *list_removed = flow == eRender ? &g_phys_speakers_removed : &g_phys_sources_removed;
 +    PhysDevice *dev, *dev_next;
- 
--    if (length)
--        *def_period = *min_period = pa_bytes_to_usec(10 * length, &ss);
++
 +    g_phys_lock();
 +    LIST_FOR_EACH_ENTRY_SAFE(dev, dev_next, list, PhysDevice, entry) {
 +        list_remove(&dev->entry);
@@ -1324,9 +1325,7 @@ index 181f9161518..f1bdee5729d 100644
 +    pthread_cond_broadcast(&g_phys_cond);
 +    g_phys_unlock();
 +}
- 
--    wfx->wFormatTag = WAVE_FORMAT_EXTENSIBLE;
--    wfx->cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
++
 +static void pulse_subscribecallback(pa_context *c, pa_subscription_event_type_t t, uint32_t index, void *userdata)
 +{
 +    pa_operation *o;
@@ -1341,7 +1340,8 @@ index 181f9161518..f1bdee5729d 100644
 +            }
 +            break;
  
--    convert_channel_map(&map, fmt);
+-    if (stream)
+-        pa_stream_unref(stream);
 +        case PA_SUBSCRIPTION_EVENT_SOURCE:
 +            if ((t & PA_SUBSCRIPTION_EVENT_TYPE_MASK) == PA_SUBSCRIPTION_EVENT_NEW) {
 +                o = pa_context_get_source_info_by_index(c, index, pulse_phys_sources_cb, userdata);
@@ -1354,6 +1354,33 @@ index 181f9161518..f1bdee5729d 100644
 +    }
 +    pulse_broadcast();
 +}
++
++static void pulse_contextcallback(pa_context *c, void *userdata)
++{
++    pa_operation *o;
++    switch (pa_context_get_state(c)) {
++        default:
++            FIXME("Unhandled state: %i\n", pa_context_get_state(c));
++            return;
+ 
+-    if (length)
+-        *def_period = *min_period = pa_bytes_to_usec(10 * length, &ss);
++        case PA_CONTEXT_CONNECTING:
++        case PA_CONTEXT_UNCONNECTED:
++        case PA_CONTEXT_AUTHORIZING:
++        case PA_CONTEXT_SETTING_NAME:
++        case PA_CONTEXT_TERMINATED:
++            TRACE("State change to %i\n", pa_context_get_state(c));
++            return;
+ 
+-    wfx->wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+-    wfx->cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
++        case PA_CONTEXT_READY:
++            TRACE("Ready\n");
+ 
+-    convert_channel_map(&map, fmt);
++            pulse_remove_all_devices(eRender);
++            pulse_remove_all_devices(eCapture);
  
 -    wfx->wBitsPerSample = 8 * pa_sample_size_of_format(ss.format);
 -    wfx->nSamplesPerSec = ss.rate;
@@ -1367,28 +1394,6 @@ index 181f9161518..f1bdee5729d 100644
 -        fmt->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 -    else
 -        fmt->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
-+static void pulse_contextcallback(pa_context *c, void *userdata)
-+{
-+    pa_operation *o;
-+    switch (pa_context_get_state(c)) {
-+        default:
-+            FIXME("Unhandled state: %i\n", pa_context_get_state(c));
-+            return;
-+
-+        case PA_CONTEXT_CONNECTING:
-+        case PA_CONTEXT_UNCONNECTED:
-+        case PA_CONTEXT_AUTHORIZING:
-+        case PA_CONTEXT_SETTING_NAME:
-+        case PA_CONTEXT_TERMINATED:
-+            TRACE("State change to %i\n", pa_context_get_state(c));
-+            return;
-+
-+        case PA_CONTEXT_READY:
-+            TRACE("Ready\n");
-+
-+            pulse_remove_all_devices(eRender);
-+            pulse_remove_all_devices(eCapture);
-+
 +            /* Burnout Paradise Remastered expects device name to have a space. */
 +            pulse_add_device(eRender, NULL, 0, Speakers, 0, "", "PulseAudio Output");
 +            pulse_add_device(eCapture, NULL, 0, Microphone, 0, "", "PulseAudio Input");
@@ -1494,7 +1499,7 @@ index 181f9161518..f1bdee5729d 100644
  }
  
  /* some poorly-behaved applications call audio functions during DllMain, so we
-@@ -897,35 +1347,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
+@@ -910,35 +1361,42 @@ static void pulse_probe_settings(int render, const char *pulse_name, WAVEFORMATE
  static NTSTATUS pulse_test_connect(void *args)
  {
      struct test_connect_params *params = args;
@@ -1553,7 +1558,7 @@ index 181f9161518..f1bdee5729d 100644
      /* Wait for connection */
      while (pa_mainloop_iterate(pulse_ml, 1, &ret) >= 0) {
          pa_context_state_t state = pa_context_get_state(pulse_ctx);
-@@ -944,53 +1401,24 @@ static NTSTATUS pulse_test_connect(void *args)
+@@ -957,53 +1415,24 @@ static NTSTATUS pulse_test_connect(void *args)
          pa_context_get_server(pulse_ctx),
          pa_context_get_server_protocol_version(pulse_ctx));
  
@@ -1616,7 +1621,7 @@ index 181f9161518..f1bdee5729d 100644
      pulse_unlock();
      params->priority = Priority_Unavailable;
      return STATUS_SUCCESS;
-@@ -1214,6 +1642,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1229,6 +1658,7 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
          return E_POINTER;
      }
  
@@ -1624,7 +1629,7 @@ index 181f9161518..f1bdee5729d 100644
      LIST_FOR_EACH_ENTRY(dev, list, PhysDevice, entry) {
          if (strcmp(pulse_name, dev->pulse_name))
              continue;
-@@ -1222,8 +1651,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
+@@ -1237,8 +1667,11 @@ static HRESULT get_device_period_helper(EDataFlow flow, const char *pulse_name,
              *def = dev->def_period;
          if (min)
              *min = dev->min_period;
@@ -1636,7 +1641,7 @@ index 181f9161518..f1bdee5729d 100644
  
      return E_FAIL;
  }
-@@ -2412,15 +2844,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
+@@ -2460,15 +2893,17 @@ static NTSTATUS pulse_get_mix_format(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1655,7 +1660,7 @@ index 181f9161518..f1bdee5729d 100644
  
      params->result = E_FAIL;
      return STATUS_SUCCESS;
-@@ -2722,17 +3156,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2770,17 +3205,22 @@ static NTSTATUS pulse_get_prop_value(void *args)
      struct list *list = (params->flow == eRender) ? &g_phys_speakers : &g_phys_sources;
      PhysDevice *dev;
  
@@ -1678,7 +1683,7 @@ index 181f9161518..f1bdee5729d 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              case 3:   /* PhysicalSpeakers */
-@@ -2740,6 +3179,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2788,6 +3228,8 @@ static NTSTATUS pulse_get_prop_value(void *args)
                      goto fail;
                  params->value->vt = VT_UI4;
                  params->value->ulVal = dev->channel_mask;
@@ -1687,7 +1692,7 @@ index 181f9161518..f1bdee5729d 100644
                  params->result = S_OK;
                  return STATUS_SUCCESS;
              }
-@@ -2754,14 +3195,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
+@@ -2802,14 +3244,17 @@ static NTSTATUS pulse_get_prop_value(void *args)
                  params->result = S_OK;
              }
  
@@ -1706,5 +1711,5 @@ index 181f9161518..f1bdee5729d 100644
      return STATUS_SUCCESS;
  }
 -- 
-2.53.0
+2.54.0
 

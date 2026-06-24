@@ -4,37 +4,31 @@ My code for audio devices hotplug support is kinda off, will likely break in wei
 
 ---
 
-For haptic in Stellar Blade and Spider-Man Remastered/Miles Morales:
+For haptic in Stellar Blade, Spider-Man Remastered/Miles Morales, and Monster Hunter Wilds:
 
 - 0001-mmdevapi-setupapi-HACK-Set-MMDevices-properties-in-s.patch
 - 0002-setupapi-Set-DeviceContainers-registry-values-when-c.patch
-- 0003-xaudio2-faudio-Implement-taking-device-ids-to-create.patch
+- 0003-mmdevapi-setupapi-HACK-additionally-set-usb-audio-en.patch
+- 0004-xaudio2-faudio-Implement-taking-device-ids-to-create.patch
 
 For haptic in Death Stranding Director's Cut and God of War Ragnarok:
 
-- 0004-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
-- 0005-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
+- 0005-setupapi-SetupDiGetDeviceRegistryProperty-now-return.patch
+- 0006-mmdevapi-Add-PROTON_MMDEV_FAKE_EXCLUSIVE-envvar-for-.patch
 
-For DSDC crash when controller hotplug patched:
+Misc:
 
-- 0006-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
+- 0007-hid-mmdevapi-full-name-for-DualSense-Wireless-Contro.patch
 
-For DSDC crash when PulseAudio server is disconnected/restarted, and other misc changes:
+For game crash when audio devices are disconnected:
 
-- 0007-mmdevapi-faudio-xaudio2-Reorganize-create-thread-for.patch
+- 0008-faudio-xaudio2-Partially-rewrite-asserts-to-error-ha.patch
+- 0009-mmdevapi-faudio-xaudio2-Reorganize-create-thread-for.patch
 
-For Helldivers 2 end of 2025 update:
+For hotplugged audio devices:
 
-- 0008-hid-mmdevapi-full-name-for-DualSense-Wireless-Contro.patch
-
-For haptic when controller is hotplugged:
-
-- 0009-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
-- 0010-mmdevapi-Call-registered-IMMNotificationClients-when.patch
-
-For Monster Hunter Wilds:
-
-- 0011-mmdevapi-setupapi-HACK-additionally-set-usb-audio-en.patch
+- 0010-winepulse-mmdevapi-Add-support-for-hotplugged-audio-.patch
+- 0011-mmdevapi-Call-registered-IMMNotificationClients-when.patch
 
 Note:
 
@@ -44,6 +38,7 @@ If you are patching on top of wine-staging, the following patch need to be exclu
 
 Change log:
 
+- 2026-06-24 Rebase to Proton 11
 - 2025-12-29 Full name for DualSense Wireless Controller, fix Helldivers 2 haptic support
 - 2025-12-27 Fix possible hang on error path when initializing mmdevapi
 - 2025-12-13 Delete device ids from device containers when removing devices

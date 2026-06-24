@@ -1,7 +1,7 @@
-From a585cc85c6cbae735202a8dc2fb0f8490f62e8d9 Mon Sep 17 00:00:00 2001
+From 43b431d44ba7077f5018ad95e605ea103905972f Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
-Date: Mon, 29 Dec 2025 23:20:56 -0400
-Subject: [PATCH 08/11] hid/mmdevapi: full name for DualSense Wireless
+Date: Wed, 24 Jun 2026 13:10:41 -0300
+Subject: [PATCH 07/11] hid/mmdevapi: full name for DualSense Wireless
  Controller
 
 ---
@@ -10,7 +10,7 @@ Subject: [PATCH 08/11] hid/mmdevapi: full name for DualSense Wireless
  2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/hidclass.sys/device.c b/dlls/hidclass.sys/device.c
-index 88e632e2881..b2d5a1c58d2 100644
+index c3e0f85e786..f43468a2ec5 100644
 --- a/dlls/hidclass.sys/device.c
 +++ b/dlls/hidclass.sys/device.c
 @@ -401,8 +401,8 @@ static const struct device_strings device_strings[] =
@@ -25,10 +25,10 @@ index 88e632e2881..b2d5a1c58d2 100644
  
  static const WCHAR *find_device_string( const WCHAR *device_id, ULONG index )
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index 0a84389dc26..d9d0d6ff340 100644
+index 77e6515b546..eff6c3bcb7a 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
-@@ -497,8 +497,8 @@ struct product_name_overrides
+@@ -603,8 +603,8 @@ struct product_name_overrides
  static const struct product_name_overrides product_name_overrides[] =
  {
      /* Sony controllers */
@@ -40,5 +40,5 @@ index 0a84389dc26..d9d0d6ff340 100644
  
  static const WCHAR *find_product_name_override(const WCHAR *device_id)
 -- 
-2.53.0
+2.54.0
 

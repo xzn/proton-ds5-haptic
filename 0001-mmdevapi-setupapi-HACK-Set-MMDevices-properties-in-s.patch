@@ -1,8 +1,8 @@
-From ea0722f205454b9848c73aee8367507f9df40ac2 Mon Sep 17 00:00:00 2001
+From 8532b2a12147b53d1c2440e948a933eb6226b903 Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
-Date: Mon, 1 Dec 2025 17:11:04 -0400
+Date: Wed, 24 Jun 2026 12:36:55 -0300
 Subject: [PATCH 01/11] mmdevapi/setupapi: HACK: Set MMDevices properties in
- setupapi (without using a pnp driver).
+ setupapi.
 
 ---
  dlls/mmdevapi/Makefile.in |   2 +-
@@ -11,18 +11,18 @@ Subject: [PATCH 01/11] mmdevapi/setupapi: HACK: Set MMDevices properties in
  3 files changed, 182 insertions(+), 29 deletions(-)
 
 diff --git a/dlls/mmdevapi/Makefile.in b/dlls/mmdevapi/Makefile.in
-index 90c2302ef50..cfdde576e39 100644
+index 26f0e8ee0aa..2157763f571 100644
 --- a/dlls/mmdevapi/Makefile.in
 +++ b/dlls/mmdevapi/Makefile.in
 @@ -1,5 +1,5 @@
  MODULE    = mmdevapi.dll
 -IMPORTS   = ole32 oleaut32 user32 advapi32 version
 +IMPORTS   = ole32 oleaut32 user32 advapi32 version setupapi
+ DELAYIMPORTS = winmm
  
  SOURCES = \
- 	audiosessionmanager.c \
 diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
-index e1fdda8f66c..2681853eb50 100644
+index 7fd518de0f6..adf2624a674 100644
 --- a/dlls/mmdevapi/devenum.c
 +++ b/dlls/mmdevapi/devenum.c
 @@ -36,6 +36,7 @@
@@ -33,7 +33,7 @@ index e1fdda8f66c..2681853eb50 100644
  
  #include "mmdevapi_private.h"
  #include "devpkey.h"
-@@ -430,10 +431,11 @@ static HRESULT MMDevice_SetPropValue(const GUID *devguid, DWORD flow, REFPROPERT
+@@ -536,10 +537,11 @@ static HRESULT MMDevice_SetPropValue(const GUID *devguid, DWORD flow, REFPROPERT
      return hr;
  }
  
@@ -47,7 +47,7 @@ index e1fdda8f66c..2681853eb50 100644
      char *dev_name;
      unsigned int size = 0;
  
-@@ -445,7 +447,7 @@ static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPE
+@@ -551,7 +553,7 @@ static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPE
      params.device      = dev_name;
      params.guid        = id;
      params.prop        = prop;
@@ -56,7 +56,7 @@ index e1fdda8f66c..2681853eb50 100644
      params.buffer      = NULL;
      params.buffer_size = &size;
  
-@@ -463,17 +465,27 @@ static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPE
+@@ -569,17 +571,27 @@ static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPE
          }
      }
  
@@ -90,7 +90,7 @@ index e1fdda8f66c..2681853eb50 100644
  }
  
  struct product_name_overrides
-@@ -501,6 +513,108 @@ static const WCHAR *find_product_name_override(const WCHAR *device_id)
+@@ -607,6 +619,108 @@ static const WCHAR *find_product_name_override(const WCHAR *device_id)
      return NULL;
  }
  
@@ -199,7 +199,7 @@ index e1fdda8f66c..2681853eb50 100644
  /* Creates or updates the state of a device
   * If GUID is null, a random guid will be assigned
   * and the device will be created
-@@ -510,6 +624,11 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -616,6 +730,11 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
      HKEY key, root;
      MMDevice *device, *cur = NULL;
      WCHAR guidstr[39];
@@ -211,7 +211,7 @@ index e1fdda8f66c..2681853eb50 100644
  
      static const PROPERTYKEY deviceinterface_key = {
          {0x233164c8, 0x1b2c, 0x4c7d, {0xbc, 0x68, 0xb6, 0x71, 0x68, 0x7a, 0x25, 0x67}}, 1
-@@ -519,6 +638,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -625,6 +744,8 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          {0xb3f8fa53, 0x0004, 0x438e, {0x90, 0x03, 0x51, 0xa4, 0x6e, 0x13, 0x9b, 0xfc}}, 2
      };
  
@@ -220,7 +220,7 @@ index e1fdda8f66c..2681853eb50 100644
      LIST_FOR_EACH_ENTRY(device, &device_list, MMDevice, entry)
      {
          if (device->flow == flow && IsEqualGUID(&device->devguid, id)){
-@@ -538,10 +659,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -644,10 +765,12 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
          list_add_tail(&device_list, &cur->entry);
      }else if(cur->ref > 0)
@@ -234,7 +234,7 @@ index e1fdda8f66c..2681853eb50 100644
  
      cur->flow = flow;
      cur->state = state;
-@@ -561,11 +684,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -667,11 +790,6 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          if (!RegCreateKeyExW(key, L"Properties", 0, NULL, 0, KEY_WRITE|KEY_READ|KEY_WOW64_64KEY, NULL, &keyprop, NULL))
          {
              PROPVARIANT pv;
@@ -246,7 +246,7 @@ index e1fdda8f66c..2681853eb50 100644
  
              if (SUCCEEDED(set_driver_prop_value(id, flow, &devicepath_key))) {
                  PROPVARIANT pv2;
-@@ -574,29 +692,31 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -680,29 +798,31 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
  
                  if (SUCCEEDED(MMDevice_GetPropValue(id, flow, &devicepath_key, &pv2)) && pv2.vt == VT_LPWSTR) {
                      const WCHAR *override;
@@ -289,7 +289,7 @@ index e1fdda8f66c..2681853eb50 100644
  
              if (FAILED(set_driver_prop_value(id, flow, &PKEY_AudioEndpoint_FormFactor)))
              {
-@@ -624,6 +744,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
+@@ -735,6 +855,9 @@ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DW
          RegCloseKey(key);
      }
  
@@ -299,7 +299,7 @@ index e1fdda8f66c..2681853eb50 100644
      if (setdefault)
      {
          if (flow == eRender)
-@@ -681,7 +804,7 @@ HRESULT load_devices_from_reg(void)
+@@ -792,7 +915,7 @@ HRESULT load_devices_from_reg(void)
          if (ret != ERROR_SUCCESS)
              continue;
          if (SUCCEEDED(CLSIDFromString(guidvalue, &guid))
@@ -309,10 +309,10 @@ index e1fdda8f66c..2681853eb50 100644
          {
              MMDevice_Create(pv.pwszVal, &guid, curflow,
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index f206e65579b..0c222d0c19d 100644
+index b860d72b16f..2226396f298 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -2266,6 +2266,9 @@ end:
+@@ -1935,6 +1935,9 @@ end:
      return ret;
  }
  
@@ -322,7 +322,7 @@ index f206e65579b..0c222d0c19d 100644
  static void SETUPDI_AddDeviceInterfaces(struct device *device, HKEY key,
      const GUID *guid, DWORD flags)
  {
-@@ -2273,6 +2276,17 @@ static void SETUPDI_AddDeviceInterfaces(struct device *device, HKEY key,
+@@ -1942,6 +1945,17 @@ static void SETUPDI_AddDeviceInterfaces(struct device *device, HKEY key,
      WCHAR subKeyName[MAX_PATH];
      LONG l = ERROR_SUCCESS;
  
@@ -340,7 +340,7 @@ index f206e65579b..0c222d0c19d 100644
      for (i = 0; !l; i++)
      {
          len = ARRAY_SIZE(subKeyName);
-@@ -2291,8 +2305,24 @@ static void SETUPDI_AddDeviceInterfaces(struct device *device, HKEY key,
+@@ -1960,8 +1974,24 @@ static void SETUPDI_AddDeviceInterfaces(struct device *device, HKEY key,
                      WCHAR symbolicLink[MAX_PATH];
                      DWORD dataType;
  
@@ -367,5 +367,5 @@ index f206e65579b..0c222d0c19d 100644
  
                          len = sizeof(symbolicLink);
 -- 
-2.53.0
+2.54.0
 

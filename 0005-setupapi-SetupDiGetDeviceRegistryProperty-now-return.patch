@@ -1,7 +1,7 @@
-From 30482750d2541bbe7bc7c91b33ccc5ce4697a5f1 Mon Sep 17 00:00:00 2001
+From c2be7c212d9484251fc7a23263d124b12c23bc2f Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
-Date: Sun, 7 Dec 2025 02:55:09 -0400
-Subject: [PATCH 04/11] setupapi: SetupDiGetDeviceRegistryProperty now returns
+Date: Wed, 24 Jun 2026 12:53:35 -0300
+Subject: [PATCH 05/11] setupapi: SetupDiGetDeviceRegistryProperty now returns
  all lower case for SPDRP_BASE_CONTAINERID; SetupDiGetDeviceRegistryPropertyA
  should return wide string for type GUID.
 
@@ -10,10 +10,10 @@ Subject: [PATCH 04/11] setupapi: SetupDiGetDeviceRegistryProperty now returns
  1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 7690a50506b..b1f55f80145 100644
+index 53d159196e3..9cc1ba87f7b 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -3699,7 +3699,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+@@ -3370,7 +3370,16 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
      if (Property < ARRAY_SIZE(PropertyMap) && PropertyMap[Property].nameA)
      {
          DWORD size = PropertyBufferSize;
@@ -31,7 +31,7 @@ index 7690a50506b..b1f55f80145 100644
                  NULL, PropertyRegDataType, PropertyBuffer, &size);
  
          if (l == ERROR_FILE_NOT_FOUND)
-@@ -3713,6 +3722,7 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
+@@ -3384,6 +3393,7 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(HDEVINFO devinfo,
          if (RequiredSize)
              *RequiredSize = size;
      }
@@ -39,7 +39,7 @@ index 7690a50506b..b1f55f80145 100644
      return ret;
  }
  
-@@ -3754,7 +3764,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
+@@ -3425,7 +3435,12 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(HDEVINFO devinfo,
              SetLastError(l);
          if (RequiredSize)
              *RequiredSize = size;
@@ -53,5 +53,5 @@ index 7690a50506b..b1f55f80145 100644
  }
  
 -- 
-2.53.0
+2.54.0
 

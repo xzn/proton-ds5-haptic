@@ -1,6 +1,6 @@
-From 3dcff6fe872f8a5bf722e7c3bace39d72e803570 Mon Sep 17 00:00:00 2001
+From cf0a53c412e06e7d7ad947fe86ab959a43910d1f Mon Sep 17 00:00:00 2001
 From: JS Deck <jsdeckerido@gmail.com>
-Date: Mon, 1 Dec 2025 19:32:25 -0400
+Date: Wed, 24 Jun 2026 12:38:02 -0300
 Subject: [PATCH 02/11] setupapi: Set DeviceContainers registry values when
  container ids are set.
 
@@ -9,10 +9,10 @@ Subject: [PATCH 02/11] setupapi: Set DeviceContainers registry values when
  1 file changed, 106 insertions(+)
 
 diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
-index 0c222d0c19d..7690a50506b 100644
+index 2226396f298..9d090d0274a 100644
 --- a/dlls/setupapi/devinst.c
 +++ b/dlls/setupapi/devinst.c
-@@ -656,9 +656,111 @@ static const struct PropertyMapEntry PropertyMap[] = {
+@@ -614,9 +614,111 @@ static const struct PropertyMapEntry PropertyMap[] = {
  };
  #undef PROPERTY_MAP_ENTRY
  
@@ -124,7 +124,7 @@ index 0c222d0c19d..7690a50506b 100644
      if (prop < ARRAY_SIZE(PropertyMap) && PropertyMap[prop].nameW)
      {
          LONG ret = RegSetValueExW(device->key, PropertyMap[prop].nameW, 0,
-@@ -775,6 +877,7 @@ static void remove_device(struct device *device)
+@@ -733,6 +835,7 @@ static void remove_device(struct device *device)
      struct device_iface *iface;
      HKEY enum_key;
  
@@ -132,7 +132,7 @@ index 0c222d0c19d..7690a50506b 100644
      delete_driver_key(device);
  
      LIST_FOR_EACH_ENTRY(iface, &device->interfaces, struct device_iface, entry)
-@@ -3670,6 +3773,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
+@@ -3340,6 +3443,9 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(HDEVINFO devinfo, SP_DEVINFO_DATA
      if (!(device = get_device(devinfo, device_data)))
          return FALSE;
  
@@ -143,5 +143,5 @@ index 0c222d0c19d..7690a50506b 100644
      {
          LONG l = RegSetValueExA(device->key, PropertyMap[Property].nameA, 0,
 -- 
-2.53.0
+2.54.0
 
